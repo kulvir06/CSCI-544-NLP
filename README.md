@@ -1,4 +1,4 @@
-# you-hv-been-lawyeredddd
+# CSCI-544-NLP
 
 **AI-Powered Immigration Assistant for F-1 Students**
 
