@@ -1,0 +1,7 @@
+node_modules
+local-setup-guide.md
+*.pdf
+rules.txt
+help.md
+chromadb
+documentation
