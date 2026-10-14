@@ -106,3 +106,21 @@ python -m scripts.finalize_benchmark \
 ```
 
 The finalizer rejects approved rows that lack source provenance or a reviewer.
+
+Run the end-to-end prototype after building the reviewed passage index:
+
+```bash
+python -m scripts.query_prototype \
+  --question "What form is required for the STEM OPT extension?" \
+  --date 2025-06-01
+```
+
+The same workflow is available through `POST /prototype/query`. It performs
+reviewed retrieval, temporal applicability checking, explanation generation,
+meaning verification, and a final release decision. Answers are returned only
+for `safe` decisions; unsafe drafts are blocked and uncertain cases abstain.
+
+The default `extractive_baseline` repeats the top reviewed source passage. This
+is a deterministic control for testing the complete architecture, not the final
+plain-language generator. A candidate produced by an LLM or human can be tested
+without releasing it by using `provided_candidate` mode.

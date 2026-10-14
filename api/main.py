@@ -19,6 +19,8 @@ from corpus.schema import (
 )
 from retrieval.schema import RetrievalRequest, RetrievalResponse
 from retrieval.search import retrieve
+from prototype.pipeline import run_prototype
+from prototype.schema import PrototypeRequest, PrototypeResponse
 from verification.meaning import verify_meaning
 from verification.safety import verify_safety
 from verification.schema import (
@@ -109,6 +111,11 @@ def verify_explanation_meaning(request: MeaningVerificationRequest):
 @app.post("/verify/safety", response_model=SafetyVerificationResponse)
 def verify_explanation_safety(request: SafetyVerificationRequest):
     return verify_safety(request)
+
+
+@app.post("/prototype/query", response_model=PrototypeResponse)
+def prototype_query(request: PrototypeRequest):
+    return run_prototype(request)
 
 @app.post("/query/")
 async def user_query(q: UserQuery):
