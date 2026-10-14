@@ -27,6 +27,7 @@ def ensure_data_directories() -> None:
         config.PASSAGE_DIR,
         config.REPORT_DIR,
         config.REVIEW_DIR,
+        config.INDEX_DIR,
         config.MANIFEST_DIR,
     ):
         path.mkdir(parents=True, exist_ok=True)

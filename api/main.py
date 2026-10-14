@@ -17,6 +17,8 @@ from corpus.schema import (
     IngestionResult,
     ReviewQueueItem,
 )
+from retrieval.schema import RetrievalRequest, RetrievalResponse
+from retrieval.search import retrieve
 
 app = FastAPI()
 
@@ -84,6 +86,11 @@ def review_document(document_id: str, request: DocumentReviewRequest):
         return submit_review(document_id, request)
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.post("/retrieve", response_model=RetrievalResponse)
+def retrieve_passages(request: RetrievalRequest):
+    return retrieve(request)
 
 @app.post("/query/")
 async def user_query(q: UserQuery):
