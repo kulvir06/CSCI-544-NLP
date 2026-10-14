@@ -50,3 +50,18 @@ Without a date it retrieves from all approved documents. With a date it returns
 only passages whose reviewed temporal metadata supports that date, or reports
 `insufficient_temporal_evidence` instead of guessing. The current reproducible
 baseline ranker is BM25 over the automatically selected passages.
+
+The `/verify/meaning` API compares a candidate plain-language explanation with
+its retrieved source passage. The deterministic baseline extracts and checks
+dates, quantities, form identifiers, negative constraints, conditions,
+exceptions, and obligations. It fails explanations that omit or contradict a
+critical fact and sends passages with no checkable facts to review.
+
+The `/verify/safety` API combines that result with temporal applicability:
+
+- `safe`: all required checks passed
+- `unsafe`: meaning was lost or the source version is not applicable
+- `abstain`: temporal evidence or checkable meaning evidence is insufficient
+
+This baseline is deliberately conservative. It supplies interpretable error
+labels for the targeted evaluation set; it is not a substitute for legal advice.

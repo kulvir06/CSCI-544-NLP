@@ -19,6 +19,14 @@ from corpus.schema import (
 )
 from retrieval.schema import RetrievalRequest, RetrievalResponse
 from retrieval.search import retrieve
+from verification.meaning import verify_meaning
+from verification.safety import verify_safety
+from verification.schema import (
+    MeaningVerificationRequest,
+    MeaningVerificationResponse,
+    SafetyVerificationRequest,
+    SafetyVerificationResponse,
+)
 
 app = FastAPI()
 
@@ -91,6 +99,16 @@ def review_document(document_id: str, request: DocumentReviewRequest):
 @app.post("/retrieve", response_model=RetrievalResponse)
 def retrieve_passages(request: RetrievalRequest):
     return retrieve(request)
+
+
+@app.post("/verify/meaning", response_model=MeaningVerificationResponse)
+def verify_explanation_meaning(request: MeaningVerificationRequest):
+    return verify_meaning(request)
+
+
+@app.post("/verify/safety", response_model=SafetyVerificationResponse)
+def verify_explanation_safety(request: SafetyVerificationRequest):
+    return verify_safety(request)
 
 @app.post("/query/")
 async def user_query(q: UserQuery):
