@@ -3,7 +3,14 @@ import unittest
 
 from fastapi.responses import FileResponse, RedirectResponse
 
-from api.main import FRONTEND_DIR, app, frontend, root
+from api.main import (
+    FRONTEND_DIR,
+    app,
+    frontend,
+    frontend_script,
+    frontend_styles,
+    root,
+)
 
 
 class FrontendTests(unittest.TestCase):
@@ -12,6 +19,8 @@ class FrontendTests(unittest.TestCase):
 
         self.assertIn("/app", route_paths)
         self.assertIn("/static", route_paths)
+        self.assertIn("/styles.css", route_paths)
+        self.assertIn("/app.js", route_paths)
 
     def test_root_redirects_to_dashboard(self):
         response = root()
@@ -26,9 +35,12 @@ class FrontendTests(unittest.TestCase):
 
         self.assertIsInstance(response, FileResponse)
         self.assertTrue(Path(response.path).is_file())
-        self.assertIn('/static/styles.css', html)
-        self.assertIn('/static/app.js', html)
+        self.assertIn('href="styles.css"', html)
+        self.assertIn('src="app.js"', html)
         self.assertIn('fetch("/prototype/query"', javascript)
+
+        self.assertTrue(Path(frontend_styles().path).is_file())
+        self.assertTrue(Path(frontend_script().path).is_file())
 
 
 if __name__ == "__main__":

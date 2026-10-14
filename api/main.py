@@ -55,6 +55,17 @@ def frontend():
     return FileResponse(FRONTEND_DIR / "index.html")
 
 
+@app.get("/styles.css", include_in_schema=False)
+def frontend_styles():
+    """Support the dashboard's relative asset path and direct-file previews."""
+    return FileResponse(FRONTEND_DIR / "styles.css", media_type="text/css")
+
+
+@app.get("/app.js", include_in_schema=False)
+def frontend_script():
+    return FileResponse(FRONTEND_DIR / "app.js", media_type="text/javascript")
+
+
 @app.get("/health")
 def health():
     return {
