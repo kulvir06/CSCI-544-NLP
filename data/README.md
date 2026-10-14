@@ -25,6 +25,13 @@ Export the pending metadata-review queue for the team:
 python -m scripts.export_review_queue
 ```
 
+Fill the `decision` (`approved` or `rejected`), `reviewer`, and missing metadata
+columns, then import the reviewed file:
+
+```bash
+python -m scripts.import_review_queue --input data/reports/metadata-review-queue.csv
+```
+
 A document is retrieval-ready only after a reviewer confirms its source URL,
 effective start date, document status, and source authority. Review decisions
 are append-only so corrections remain auditable. The application records URLs

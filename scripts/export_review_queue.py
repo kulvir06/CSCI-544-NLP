@@ -24,6 +24,9 @@ FIELDNAMES = (
     "status",
     "source_tier",
     "blocking_issues",
+    "decision",
+    "reviewer",
+    "notes",
 )
 
 
@@ -52,6 +55,11 @@ def export_review_queue(output_path: Path, include_resolved: bool = False) -> Pa
                     "status": metadata.status.value,
                     "source_tier": item.current_source_tier.value,
                     "blocking_issues": ";".join(item.blocking_issues),
+                    "decision": item.decision.value if item.decision else "",
+                    "reviewer": (
+                        item.latest_review.reviewer if item.latest_review else ""
+                    ),
+                    "notes": item.latest_review.notes if item.latest_review else "",
                 }
             )
     return output_path

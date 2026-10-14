@@ -21,6 +21,7 @@ from corpus.schema import (
     ReviewDecision,
 )
 from scripts.export_review_queue import export_review_queue
+from scripts.import_review_queue import import_review_queue
 
 
 class MetadataReviewTests(unittest.TestCase):
@@ -98,6 +99,34 @@ class MetadataReviewTests(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["document_id"], self.document_id)
         self.assertIn("missing_source_url", rows[0]["blocking_issues"])
+
+    def test_completed_csv_can_be_imported(self):
+        output_path = export_review_queue(self.base / "queue.csv")
+        with output_path.open(encoding="utf-8", newline="") as queue_file:
+            reader = csv.DictReader(queue_file)
+            fieldnames = reader.fieldnames
+            rows = list(reader)
+
+        rows[0].update(
+            {
+                "source_url": "https://www.uscis.gov/example",
+                "effective_from": "2025-01-01",
+                "status": "current",
+                "decision": "approved",
+                "reviewer": "Team Member",
+                "notes": "Verified from uploaded source.",
+            }
+        )
+        with output_path.open("w", encoding="utf-8", newline="") as queue_file:
+            writer = csv.DictWriter(queue_file, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(rows)
+
+        report = import_review_queue(output_path)
+
+        self.assertEqual(report["processed_rows"], 1)
+        self.assertEqual(report["failed_rows"], 0)
+        self.assertEqual(len(load_retrieval_ready_documents()), 1)
 
 
 if __name__ == "__main__":
