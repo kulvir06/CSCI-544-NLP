@@ -12,8 +12,10 @@ RAW_DOCUMENT_DIR = DATA_DIR / "raw"
 NORMALIZED_DOCUMENT_DIR = DATA_DIR / "normalized"
 PASSAGE_DIR = DATA_DIR / "passages"
 REPORT_DIR = DATA_DIR / "reports"
+REVIEW_DIR = DATA_DIR / "reviews"
 MANIFEST_DIR = DATA_DIR / "manifests"
 MANIFEST_PATH = MANIFEST_DIR / "documents.jsonl"
+REVIEW_LOG_PATH = REVIEW_DIR / "document_reviews.jsonl"
 
 MAX_UPLOAD_BYTES = int(os.getenv("NLP_MAX_UPLOAD_BYTES", 25 * 1024 * 1024))
 SUPPORTED_UPLOAD_SUFFIXES = {".pdf", ".html", ".htm", ".txt"}

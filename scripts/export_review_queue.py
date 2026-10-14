@@ -1,0 +1,74 @@
+"""Export the local metadata review queue as a team-editable CSV file."""
+
+from __future__ import annotations
+
+import argparse
+import csv
+from pathlib import Path
+
+from api import config
+from corpus.review import build_review_queue
+from corpus.storage import ensure_data_directories
+
+
+FIELDNAMES = (
+    "document_id",
+    "filename",
+    "title",
+    "issuer",
+    "source_url",
+    "published_at",
+    "effective_from",
+    "effective_to",
+    "rule_family",
+    "status",
+    "source_tier",
+    "blocking_issues",
+)
+
+
+def export_review_queue(output_path: Path, include_resolved: bool = False) -> Path:
+    ensure_data_directories()
+    output_path = output_path.expanduser().resolve()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    queue = build_review_queue(include_resolved=include_resolved)
+
+    with output_path.open("w", encoding="utf-8", newline="") as output:
+        writer = csv.DictWriter(output, fieldnames=FIELDNAMES)
+        writer.writeheader()
+        for item in queue:
+            metadata = item.current_metadata
+            writer.writerow(
+                {
+                    "document_id": item.document.document_id,
+                    "filename": metadata.original_filename,
+                    "title": metadata.title or "",
+                    "issuer": metadata.issuer or "",
+                    "source_url": metadata.source_url or "",
+                    "published_at": metadata.published_at or "",
+                    "effective_from": metadata.effective_from or "",
+                    "effective_to": metadata.effective_to or "",
+                    "rule_family": metadata.rule_family or "",
+                    "status": metadata.status.value,
+                    "source_tier": item.current_source_tier.value,
+                    "blocking_issues": ";".join(item.blocking_issues),
+                }
+            )
+    return output_path
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Export pending metadata reviews.")
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=config.REPORT_DIR / "metadata-review-queue.csv",
+    )
+    parser.add_argument("--include-resolved", action="store_true")
+    arguments = parser.parse_args()
+    output_path = export_review_queue(arguments.output, arguments.include_resolved)
+    print(output_path)
+
+
+if __name__ == "__main__":
+    main()

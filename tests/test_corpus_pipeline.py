@@ -90,6 +90,8 @@ class CorpusPipelineTests(unittest.TestCase):
                 patch.object(config, "NORMALIZED_DOCUMENT_DIR", base / "normalized"),
                 patch.object(config, "PASSAGE_DIR", base / "passages"),
                 patch.object(config, "REPORT_DIR", base / "reports"),
+                patch.object(config, "REVIEW_DIR", base / "reviews"),
+                patch.object(config, "REVIEW_LOG_PATH", base / "reviews" / "document_reviews.jsonl"),
                 patch.object(config, "MANIFEST_DIR", base / "manifests"),
                 patch.object(config, "MANIFEST_PATH", base / "manifests" / "documents.jsonl"),
             ):
@@ -121,6 +123,8 @@ class CorpusPipelineTests(unittest.TestCase):
                 patch.object(config, "NORMALIZED_DOCUMENT_DIR", base / "normalized"),
                 patch.object(config, "PASSAGE_DIR", base / "passages"),
                 patch.object(config, "REPORT_DIR", base / "reports"),
+                patch.object(config, "REVIEW_DIR", base / "reviews"),
+                patch.object(config, "REVIEW_LOG_PATH", base / "reviews" / "document_reviews.jsonl"),
                 patch.object(config, "MANIFEST_DIR", base / "manifests"),
                 patch.object(config, "MANIFEST_PATH", base / "manifests" / "documents.jsonl"),
             ):

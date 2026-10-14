@@ -14,9 +14,11 @@ data/raw/*
 data/normalized/*
 data/passages/*
 data/reports/*
+data/reviews/*
 data/manifests/documents.jsonl
 !data/raw/.gitkeep
 !data/normalized/.gitkeep
 !data/passages/.gitkeep
 !data/reports/.gitkeep
+!data/reviews/.gitkeep
 !data/manifests/.gitkeep

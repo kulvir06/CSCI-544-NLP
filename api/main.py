@@ -8,7 +8,15 @@ from pydantic import BaseModel, ValidationError
 import uvicorn
 from api import config
 from corpus.pipeline import ingest_upload
-from corpus.schema import DocumentMetadata, DocumentStatus, IngestionResult
+from corpus.review import build_review_queue, submit_review
+from corpus.schema import (
+    DocumentMetadata,
+    DocumentReview,
+    DocumentReviewRequest,
+    DocumentStatus,
+    IngestionResult,
+    ReviewQueueItem,
+)
 
 app = FastAPI()
 
@@ -56,6 +64,19 @@ async def upload_document(
         )
         return ingest_upload(metadata.original_filename, content, metadata)
     except (ValueError, ValidationError) as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.get("/documents/review-queue", response_model=list[ReviewQueueItem])
+def review_queue(include_resolved: bool = False):
+    return build_review_queue(include_resolved=include_resolved)
+
+
+@app.post("/documents/{document_id}/review", response_model=DocumentReview)
+def review_document(document_id: str, request: DocumentReviewRequest):
+    try:
+        return submit_review(document_id, request)
+    except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
 
 @app.post("/query/")

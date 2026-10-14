@@ -24,6 +24,11 @@ class DocumentStatus(str, Enum):
     UNKNOWN = "unknown"
 
 
+class ReviewDecision(str, Enum):
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+
 class DocumentMetadata(BaseModel):
     original_filename: str
     title: Optional[str] = None
@@ -112,3 +117,42 @@ class BatchIngestionReport(BaseModel):
     total_selected_passages: int
     results: list[BatchDocumentResult]
     report_file: Optional[str] = None
+
+
+class MetadataCorrections(BaseModel):
+    title: Optional[str] = None
+    issuer: Optional[str] = None
+    source_url: Optional[str] = None
+    published_at: Optional[date] = None
+    effective_from: Optional[date] = None
+    effective_to: Optional[date] = None
+    rule_family: Optional[str] = None
+    status: Optional[DocumentStatus] = None
+
+
+class DocumentReviewRequest(BaseModel):
+    decision: ReviewDecision
+    reviewer: str = Field(min_length=1)
+    corrections: MetadataCorrections = Field(default_factory=MetadataCorrections)
+    notes: Optional[str] = None
+
+
+class DocumentReview(BaseModel):
+    document_id: str
+    decision: ReviewDecision
+    reviewer: str
+    reviewed_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc)
+    )
+    metadata: DocumentMetadata
+    source_tier: SourceTier
+    notes: Optional[str] = None
+
+
+class ReviewQueueItem(BaseModel):
+    document: StoredDocument
+    current_metadata: DocumentMetadata
+    current_source_tier: SourceTier
+    decision: Optional[ReviewDecision] = None
+    blocking_issues: list[str] = Field(default_factory=list)
+    latest_review: Optional[DocumentReview] = None
