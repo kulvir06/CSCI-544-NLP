@@ -173,4 +173,6 @@ class ReviewQueueItem(BaseModel):
     decision: Optional[ReviewDecision] = None
     corpus_use: Optional[CorpusUse] = None
     blocking_issues: list[str] = Field(default_factory=list)
+    meaning_blocking_issues: list[str] = Field(default_factory=list)
+    temporal_blocking_issues: list[str] = Field(default_factory=list)
     latest_review: Optional[DocumentReview] = None

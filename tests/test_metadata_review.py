@@ -122,7 +122,8 @@ class MetadataReviewTests(unittest.TestCase):
 
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["document_id"], self.document_id)
-        self.assertIn("missing_source_url", rows[0]["blocking_issues"])
+        self.assertIn("missing_source_url", rows[0]["meaning_blocking_issues"])
+        self.assertIn("missing_temporal_basis", rows[0]["temporal_blocking_issues"])
 
     def test_completed_csv_can_be_imported(self):
         output_path = export_review_queue(self.base / "queue.csv")

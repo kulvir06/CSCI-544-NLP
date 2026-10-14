@@ -118,6 +118,12 @@ def build_review_queue(include_resolved: bool = False) -> list[ReviewQueueItem]:
                 decision=decision,
                 corpus_use=latest.corpus_use if latest else None,
                 blocking_issues=_blocking_issues(metadata, source_tier),
+                meaning_blocking_issues=_approval_blockers(
+                    metadata, source_tier, CorpusUse.MEANING_ONLY
+                ),
+                temporal_blocking_issues=_approval_blockers(
+                    metadata, source_tier, CorpusUse.TEMPORAL_AND_MEANING
+                ),
                 latest_review=latest,
             )
         )

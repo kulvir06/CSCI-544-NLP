@@ -26,7 +26,11 @@ FIELDNAMES = (
     "rule_family",
     "status",
     "source_tier",
-    "blocking_issues",
+    "date_mentions",
+    "suggested_effective_dates",
+    "suggested_valid_as_of_dates",
+    "meaning_blocking_issues",
+    "temporal_blocking_issues",
     "decision",
     "corpus_use",
     "reviewer",
@@ -61,7 +65,21 @@ def export_review_queue(output_path: Path, include_resolved: bool = False) -> Pa
                     "rule_family": metadata.rule_family or "",
                     "status": metadata.status.value,
                     "source_tier": item.current_source_tier.value,
-                    "blocking_issues": ";".join(item.blocking_issues),
+                    "date_mentions": ";".join(
+                        item.document.metadata_candidates.date_mentions
+                    ),
+                    "suggested_effective_dates": ";".join(
+                        item.document.metadata_candidates.effective_date_candidates
+                    ),
+                    "suggested_valid_as_of_dates": ";".join(
+                        item.document.metadata_candidates.valid_as_of_candidates
+                    ),
+                    "meaning_blocking_issues": ";".join(
+                        item.meaning_blocking_issues
+                    ),
+                    "temporal_blocking_issues": ";".join(
+                        item.temporal_blocking_issues
+                    ),
                     "decision": item.decision.value if item.decision else "",
                     "corpus_use": item.corpus_use.value if item.corpus_use else "",
                     "reviewer": (
