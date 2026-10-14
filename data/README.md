@@ -65,3 +65,20 @@ The `/verify/safety` API combines that result with temporal applicability:
 
 This baseline is deliberately conservative. It supplies interpretable error
 labels for the targeted evaluation set; it is not a substitute for legal advice.
+
+Run the four-configuration development evaluation:
+
+```bash
+python -m scripts.run_evaluation \
+  --cases evaluation/cases/development_cases.jsonl
+```
+
+The report compares `static_baseline`, `temporal_only`, `meaning_only`, and
+`combined`. It includes false-safe rate, unsafe detection rate, safe acceptance,
+abstention, exact accuracy, per-error results, temporal-verdict accuracy, and
+mean critical-fact preservation.
+
+The committed cases are explicitly marked `development_fixture=true`; they test
+the software but are not legal evidence. Final benchmark cases must reference an
+approved document and passage, retain the official source URL, and record the
+reviewer who confirmed the label.
