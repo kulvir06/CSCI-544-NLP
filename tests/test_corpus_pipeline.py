@@ -122,6 +122,8 @@ class CorpusPipelineTests(unittest.TestCase):
                     len(config.MANIFEST_PATH.read_text(encoding="utf-8").splitlines()),
                     1,
                 )
+                manifest_text = config.MANIFEST_PATH.read_text(encoding="utf-8")
+                self.assertIn("metadata_candidates", manifest_text)
 
     def test_batch_ingestion_writes_report(self):
         with TemporaryDirectory() as temporary_directory:

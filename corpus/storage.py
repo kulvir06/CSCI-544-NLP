@@ -73,12 +73,21 @@ def save_passages(document_id: str, passages: list[Passage]) -> Path:
 
 def append_manifest(document: StoredDocument) -> None:
     ensure_data_directories()
-    existing_ids: set[str] = set()
+    records: list[dict] = []
     if config.MANIFEST_PATH.exists():
         for line in config.MANIFEST_PATH.read_text(encoding="utf-8").splitlines():
             if line.strip():
-                existing_ids.add(json.loads(line)["document_id"])
-    if document.document_id in existing_ids:
-        return
-    with config.MANIFEST_PATH.open("a", encoding="utf-8") as manifest:
-        manifest.write(document.model_dump_json() + "\n")
+                records.append(json.loads(line))
+
+    replacement = json.loads(document.model_dump_json())
+    updated = False
+    for index, record in enumerate(records):
+        if record["document_id"] == document.document_id:
+            records[index] = replacement
+            updated = True
+            break
+    if not updated:
+        records.append(replacement)
+
+    body = "\n".join(json.dumps(record, separators=(",", ":")) for record in records)
+    config.MANIFEST_PATH.write_text(f"{body}\n", encoding="utf-8")
