@@ -2,6 +2,23 @@
 
 **AI-Powered Immigration Assistant for F-1 Students**
 
+## Run the verified prototype
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python3 -m uvicorn api.main:app --reload
+```
+
+Open [http://127.0.0.1:8000/app](http://127.0.0.1:8000/app) to use the local
+dashboard. It visualizes passage retrieval, temporal applicability, atomic fact
+preservation, and the final release/block decision. The API documentation remains
+available at [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs).
+
+The dashboard only searches the approved local retrieval index. A `no_evidence`
+result is expected until corpus metadata has been reviewed and the index rebuilt.
+
 ---
 
 ### **Project Description**

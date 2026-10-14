@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Test temporal grounding and meaning-preservation verification for F-1 employment guidance."
+    />
+    <title>F-1 Grounding Lab</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+    <script src="/static/app.js" defer></script>
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="/app" aria-label="F-1 Grounding Lab home">
+        <span class="brand-mark" aria-hidden="true">F1</span>
+        <span>
+          <strong>Grounding Lab</strong>
+          <small>Temporal + meaning verification</small>
+        </span>
+      </a>
+      <div class="system-state" title="The prototype runs only against locally reviewed documents.">
+        <span class="state-dot"></span>
+        Local, reviewed corpus
+      </div>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div>
+          <p class="eyebrow">CSCI 544 · NLP research prototype</p>
+          <h1>Can this F-1 explanation be safely released?</h1>
+          <p class="lede">
+            Ask an employment or extension question. The system retrieves reviewed evidence,
+            checks whether it applies on the selected date, and tests whether important meaning
+            survives simplification.
+          </p>
+        </div>
+        <div class="research-note">
+          <span>Research focus</span>
+          <strong>When can one verifier pass while the overall answer is still wrong?</strong>
+        </div>
+      </section>
+
+      <section class="workspace">
+        <form id="query-form" class="query-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="step-label">Test input</p>
+              <h2>Run a verification</h2>
+            </div>
+            <button id="reset-button" class="text-button" type="button">Reset</button>
+          </div>
+
+          <label for="question">Question</label>
+          <textarea
+            id="question"
+            name="question"
+            rows="3"
+            required
+            placeholder="What form is required for the STEM OPT extension?"
+          ></textarea>
+
+          <div class="examples" aria-label="Example questions">
+            <button type="button" data-question="What form is required for the STEM OPT extension?">
+              STEM OPT form
+            </button>
+            <button type="button" data-question="How does the cap-gap employment extension work?">
+              Cap-gap extension
+            </button>
+            <button type="button" data-question="What are the employment limits for F-1 students?">
+              Employment limits
+            </button>
+          </div>
+
+          <div class="field-grid">
+            <div>
+              <label for="relevant-date">Relevant date <span class="optional">optional</span></label>
+              <input id="relevant-date" name="relevant-date" type="date" />
+              <p class="field-help">Add a date to require temporal verification.</p>
+            </div>
+            <div>
+              <label for="top-k">Evidence passages</label>
+              <select id="top-k" name="top-k">
+                <option value="3">Top 3</option>
+                <option value="5" selected>Top 5</option>
+                <option value="10">Top 10</option>
+              </select>
+            </div>
+          </div>
+
+          <fieldset>
+            <legend>Explanation to verify</legend>
+            <label class="mode-card">
+              <input type="radio" name="generator-mode" value="extractive_baseline" checked />
+              <span>
+                <strong>Faithful control</strong>
+                <small>Use the retrieved passage unchanged.</small>
+              </span>
+            </label>
+            <label class="mode-card">
+              <input type="radio" name="generator-mode" value="provided_candidate" />
+              <span>
+                <strong>Custom candidate</strong>
+                <small>Edit details to test subtle meaning-loss cases.</small>
+              </span>
+            </label>
+          </fieldset>
+
+          <div id="candidate-field" class="candidate-field" hidden>
+            <label for="candidate-explanation">Candidate explanation</label>
+            <textarea
+              id="candidate-explanation"
+              name="candidate-explanation"
+              rows="5"
+              placeholder="Paste or write a plain-language explanation to verify."
+            ></textarea>
+          </div>
+
+          <button id="submit-button" class="primary-button" type="submit">
+            <span>Run verification</span>
+            <span aria-hidden="true">→</span>
+          </button>
+          <p id="form-error" class="form-error" role="alert" hidden></p>
+        </form>
+
+        <section id="results-panel" class="results-panel" aria-live="polite">
+          <div id="empty-state" class="empty-state">
+            <div class="empty-graphic" aria-hidden="true">
+              <span>1</span><i></i><span>2</span><i></i><span>3</span><i></i><span>4</span>
+            </div>
+            <h2>Results will appear here</h2>
+            <p>Run a question to inspect every decision instead of seeing only a final answer.</p>
+          </div>
+
+          <div id="loading-state" class="loading-state" hidden>
+            <div class="spinner" aria-hidden="true"></div>
+            <h2>Checking the explanation</h2>
+            <p>Retrieving evidence and running both verification stages…</p>
+          </div>
+
+          <div id="results" hidden>
+            <div class="result-header">
+              <div>
+                <p class="step-label">Final system decision</p>
+                <div class="verdict-line">
+                  <span id="verdict-icon" class="verdict-icon"></span>
+                  <h2 id="verdict-title"></h2>
+                </div>
+                <p id="verdict-message"></p>
+              </div>
+              <span id="verdict-badge" class="badge"></span>
+            </div>
+
+            <div id="pipeline" class="pipeline" aria-label="Verification pipeline"></div>
+
+            <article id="answer-card" class="result-card" hidden>
+              <div class="card-title-row">
+                <h3 id="answer-card-title">Released answer</h3>
+                <span id="answer-state" class="badge"></span>
+              </div>
+              <p id="answer-text" class="answer-text"></p>
+            </article>
+
+            <article class="result-card">
+              <div class="card-title-row">
+                <div>
+                  <p class="step-label">Stage 1</p>
+                  <h3>Retrieved evidence</h3>
+                </div>
+                <span id="hit-count" class="count-pill"></span>
+              </div>
+              <div id="evidence-list" class="evidence-list"></div>
+            </article>
+
+            <article id="meaning-card" class="result-card" hidden>
+              <div class="card-title-row">
+                <div>
+                  <p class="step-label">Stage 2</p>
+                  <h3>Critical-fact checks</h3>
+                </div>
+                <div id="preservation-score" class="score-ring" aria-label="Critical fact preservation score"></div>
+              </div>
+              <div id="fact-summary" class="fact-summary"></div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Fact type</th>
+                      <th>Source fact</th>
+                      <th>Status</th>
+                      <th>Coverage</th>
+                    </tr>
+                  </thead>
+                  <tbody id="facts-body"></tbody>
+                </table>
+              </div>
+            </article>
+
+            <details class="raw-result">
+              <summary>Developer view · raw JSON</summary>
+              <div class="raw-toolbar">
+                <button id="copy-json" class="text-button" type="button">Copy JSON</button>
+              </div>
+              <pre id="raw-json"></pre>
+            </details>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <footer>
+      Research prototype only · Not legal advice · No network ingestion or web scraping
+    </footer>
+  </body>
+</html>

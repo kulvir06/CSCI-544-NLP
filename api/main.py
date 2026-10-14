@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 from datetime import date
+from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ValidationError
 import uvicorn
 from api import config
@@ -30,11 +33,26 @@ from verification.schema import (
     SafetyVerificationResponse,
 )
 
-app = FastAPI()
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+FRONTEND_DIR = PROJECT_ROOT / "frontend"
+
+app = FastAPI(
+    title="F-1 Verified Explanation Prototype",
+    description=(
+        "Local, upload-only prototype for temporal grounding and meaning-preservation "
+        "verification of F-1 employment guidance."
+    ),
+)
+app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 
 @app.get("/")
 def root():
-    return "hello"
+    return RedirectResponse(url="/app")
+
+
+@app.get("/app", include_in_schema=False)
+def frontend():
+    return FileResponse(FRONTEND_DIR / "index.html")
 
 
 @app.get("/health")
