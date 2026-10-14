@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+from datetime import date
 from enum import Enum
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from retrieval.schema import TemporalVerdict
 from verification.schema import MeaningVerdict, SafetyVerdict
@@ -43,11 +44,34 @@ class EvaluationCase(BaseModel):
     temporal_verification_required: bool = False
     observed_temporal_verdict: TemporalVerdict = TemporalVerdict.NOT_REQUESTED
     expected_temporal_verdict: TemporalVerdict = TemporalVerdict.NOT_REQUESTED
+    relevant_date: Optional[date] = None
     document_id: Optional[str] = None
     passage_id: Optional[str] = None
+    page_number: Optional[int] = None
     source_url: Optional[str] = None
     reviewer: Optional[str] = None
+    mutation_description: Optional[str] = None
+    review_notes: Optional[str] = None
     development_fixture: bool = True
+
+    @model_validator(mode="after")
+    def reviewed_cases_require_provenance(self) -> "EvaluationCase":
+        if not self.development_fixture:
+            missing = [
+                name
+                for name, value in (
+                    ("document_id", self.document_id),
+                    ("passage_id", self.passage_id),
+                    ("source_url", self.source_url),
+                    ("reviewer", self.reviewer),
+                )
+                if not value
+            ]
+            if missing:
+                raise ValueError(
+                    "Reviewed benchmark case is missing: " + ", ".join(missing)
+                )
+        return self
 
 
 class CaseEvaluationResult(BaseModel):
@@ -84,4 +108,3 @@ class EvaluationReport(BaseModel):
     mean_critical_fact_preservation: float
     systems: dict[SystemConfiguration, SystemMetrics]
     cases: list[CaseEvaluationResult]
-

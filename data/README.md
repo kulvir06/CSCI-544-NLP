@@ -82,3 +82,27 @@ The committed cases are explicitly marked `development_fixture=true`; they test
 the software but are not legal evidence. Final benchmark cases must reference an
 approved document and passage, retain the official source URL, and record the
 reviewer who confirmed the label.
+
+After approved documents have been indexed, automatically draft a small,
+diverse benchmark and its review sheet:
+
+```bash
+python -m scripts.draft_benchmark --max-per-error 2 --safe-controls 2
+```
+
+The draft generator chooses compact approved passages containing checkable
+facts, applies exactly one controlled mutation per negative case, and preserves
+the document ID, passage ID, page number, source URL, and relevant date. Drafts
+remain development fixtures until a reviewer marks `approve=yes` and supplies
+their name in `data/reports/benchmark-review.csv`.
+
+Finalize the signed-off cases:
+
+```bash
+python -m scripts.finalize_benchmark \
+  --draft-jsonl data/reports/benchmark-draft.jsonl \
+  --review-csv data/reports/benchmark-review.csv \
+  --output data/reports/reviewed-benchmark.jsonl
+```
+
+The finalizer rejects approved rows that lack source provenance or a reviewer.
