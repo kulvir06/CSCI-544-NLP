@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import mimetypes
 
+from corpus.metadata_extraction import enrich_metadata
 from corpus.parser import parse_document
 from corpus.schema import DocumentMetadata, IngestionResult, SourceTier, StoredDocument
 from corpus.selector import select_passages
@@ -23,6 +24,7 @@ def ingest_upload(
 ) -> IngestionResult:
     stored = save_upload(filename, content)
     blocks = parse_document(stored.path)
+    metadata, metadata_candidates = enrich_metadata(metadata, blocks)
     source_tier = classify_source(metadata)
     passages = select_passages(stored.document_id, blocks)
 
@@ -43,6 +45,7 @@ def ingest_upload(
         media_type=mimetypes.guess_type(filename)[0] or "application/octet-stream",
         byte_size=len(content),
         metadata=metadata,
+        metadata_candidates=metadata_candidates,
         source_tier=source_tier,
         review_flags=review_flags,
     )

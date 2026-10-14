@@ -46,6 +46,12 @@ class DocumentMetadata(BaseModel):
         return self
 
 
+class MetadataCandidates(BaseModel):
+    date_mentions: list[str] = Field(default_factory=list)
+    effective_date_candidates: list[str] = Field(default_factory=list)
+    inferred_fields: list[str] = Field(default_factory=list)
+
+
 class StoredDocument(BaseModel):
     document_id: str
     checksum_sha256: str
@@ -53,6 +59,7 @@ class StoredDocument(BaseModel):
     media_type: str
     byte_size: int
     metadata: DocumentMetadata
+    metadata_candidates: MetadataCandidates = Field(default_factory=MetadataCandidates)
     source_tier: SourceTier
     ingested_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc)
@@ -86,3 +93,22 @@ class IngestionResult(BaseModel):
     duplicate_upload: bool
     passage_file: str
     normalized_text_file: str
+
+
+class BatchDocumentResult(BaseModel):
+    filename: str
+    outcome: str
+    document_id: Optional[str] = None
+    selected_passages: int = 0
+    review_flags: list[str] = Field(default_factory=list)
+    error: Optional[str] = None
+
+
+class BatchIngestionReport(BaseModel):
+    input_directory: str
+    discovered_files: int
+    processed_files: int
+    failed_files: int
+    total_selected_passages: int
+    results: list[BatchDocumentResult]
+    report_file: Optional[str] = None

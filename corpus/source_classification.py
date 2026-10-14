@@ -5,6 +5,8 @@ This module only inspects metadata supplied with a file. It never opens URLs.
 
 from __future__ import annotations
 
+import re
+
 from corpus.schema import DocumentMetadata, SourceTier
 
 
@@ -14,6 +16,7 @@ PRIMARY_MARKERS = (
     "govinfo.gov",
     "federal register",
     "electronic code of federal regulations",
+    "u.s. federal regulation",
 )
 FEDERAL_GUIDANCE_MARKERS = (
     "uscis.gov",
@@ -40,7 +43,9 @@ def classify_source(metadata: DocumentMetadata) -> SourceTier:
         if value
     ).lower()
 
-    if any(marker in haystack for marker in PRIMARY_MARKERS):
+    if any(marker in haystack for marker in PRIMARY_MARKERS) or re.search(
+        r"\b8\s+cfr\b", haystack
+    ):
         return SourceTier.PRIMARY_LAW
     if any(marker in haystack for marker in FEDERAL_GUIDANCE_MARKERS):
         return SourceTier.FEDERAL_GUIDANCE

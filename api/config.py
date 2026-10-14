@@ -11,6 +11,7 @@ DATA_DIR = Path(os.getenv("NLP_DATA_DIR", PROJECT_ROOT / "data")).resolve()
 RAW_DOCUMENT_DIR = DATA_DIR / "raw"
 NORMALIZED_DOCUMENT_DIR = DATA_DIR / "normalized"
 PASSAGE_DIR = DATA_DIR / "passages"
+REPORT_DIR = DATA_DIR / "reports"
 MANIFEST_DIR = DATA_DIR / "manifests"
 MANIFEST_PATH = MANIFEST_DIR / "documents.jsonl"
 

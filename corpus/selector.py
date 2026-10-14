@@ -27,9 +27,20 @@ TEMPORAL_PATTERN = re.compile(
     r"\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+\d{4}\b",
     re.I,
 )
+SCOPE_PATTERN = re.compile(
+    r"\bF-?1\b|\b(?:STEM\s+)?OPT\b|optional practical training|"
+    r"\bCPT\b|curricular practical training|cap[- ]gap|\bDSO\b|\bSEVIS\b|"
+    r"\bForm\s+I-20\b|\bstudent(?:'s|s)?\b.{0,80}"
+    r"\b(employ(?:ment|ed)?|work|practical training)\b",
+    re.I,
+)
 
 
 def score_block(block: ParsedBlock) -> tuple[float, list[str]]:
+    scope_text = f"{block.section or ''}\n{block.text}"
+    if not SCOPE_PATTERN.search(scope_text):
+        return 0.0, []
+
     reasons: list[str] = []
     topic_hits = [name for name, pattern in TOPIC_PATTERNS.items() if pattern.search(block.text)]
     rule_hits = [name for name, pattern in RULE_PATTERNS.items() if pattern.search(block.text)]

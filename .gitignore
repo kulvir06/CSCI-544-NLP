@@ -13,8 +13,10 @@ __pycache__/
 data/raw/*
 data/normalized/*
 data/passages/*
+data/reports/*
 data/manifests/documents.jsonl
 !data/raw/.gitkeep
 !data/normalized/.gitkeep
 !data/passages/.gitkeep
+!data/reports/.gitkeep
 !data/manifests/.gitkeep

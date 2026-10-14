@@ -25,6 +25,7 @@ def ensure_data_directories() -> None:
         config.RAW_DOCUMENT_DIR,
         config.NORMALIZED_DOCUMENT_DIR,
         config.PASSAGE_DIR,
+        config.REPORT_DIR,
         config.MANIFEST_DIR,
     ):
         path.mkdir(parents=True, exist_ok=True)

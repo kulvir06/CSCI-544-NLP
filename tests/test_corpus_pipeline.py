@@ -5,6 +5,7 @@ import unittest
 from unittest.mock import patch
 
 from api import config
+from corpus.batch import ingest_directory
 from corpus.parser import parse_text
 from corpus.pipeline import ingest_upload
 from corpus.schema import DocumentMetadata, SourceTier
@@ -20,6 +21,20 @@ class CorpusPipelineTests(unittest.TestCase):
             source_url="https://www.federalregister.gov/example",
         )
         self.assertEqual(classify_source(metadata), SourceTier.PRIMARY_LAW)
+
+    def test_8_cfr_filename_is_primary_source(self):
+        metadata = DocumentMetadata(
+            original_filename="8 CFR 214.2.pdf",
+            title="8 CFR 214.2",
+            issuer="U.S. Federal Regulation",
+        )
+        self.assertEqual(classify_source(metadata), SourceTier.PRIMARY_LAW)
+
+    def test_unrelated_visa_rule_is_not_selected(self):
+        blocks = parse_text(
+            Path(__file__).parent / "fixtures" / "unrelated-rule.txt"
+        )
+        self.assertEqual(select_passages("doc", blocks), [])
 
     def test_university_advisory_is_secondary(self):
         metadata = DocumentMetadata(
@@ -74,6 +89,7 @@ class CorpusPipelineTests(unittest.TestCase):
                 patch.object(config, "RAW_DOCUMENT_DIR", base / "raw"),
                 patch.object(config, "NORMALIZED_DOCUMENT_DIR", base / "normalized"),
                 patch.object(config, "PASSAGE_DIR", base / "passages"),
+                patch.object(config, "REPORT_DIR", base / "reports"),
                 patch.object(config, "MANIFEST_DIR", base / "manifests"),
                 patch.object(config, "MANIFEST_PATH", base / "manifests" / "documents.jsonl"),
             ):
@@ -89,6 +105,31 @@ class CorpusPipelineTests(unittest.TestCase):
                     len(config.MANIFEST_PATH.read_text(encoding="utf-8").splitlines()),
                     1,
                 )
+
+    def test_batch_ingestion_writes_report(self):
+        with TemporaryDirectory() as temporary_directory:
+            base = Path(temporary_directory)
+            inputs = base / "inputs"
+            inputs.mkdir()
+            (inputs / "uscis-stem.txt").write_text(
+                "USCIS guidance states that F-1 students on STEM OPT must submit "
+                "Form I-983 for a 24 month extension.",
+                encoding="utf-8",
+            )
+            with (
+                patch.object(config, "RAW_DOCUMENT_DIR", base / "raw"),
+                patch.object(config, "NORMALIZED_DOCUMENT_DIR", base / "normalized"),
+                patch.object(config, "PASSAGE_DIR", base / "passages"),
+                patch.object(config, "REPORT_DIR", base / "reports"),
+                patch.object(config, "MANIFEST_DIR", base / "manifests"),
+                patch.object(config, "MANIFEST_PATH", base / "manifests" / "documents.jsonl"),
+            ):
+                report = ingest_directory(inputs)
+
+            self.assertEqual(report.processed_files, 1)
+            self.assertEqual(report.failed_files, 0)
+            self.assertEqual(report.total_selected_passages, 1)
+            self.assertTrue(Path(report.report_file).exists())
 
 
 if __name__ == "__main__":
