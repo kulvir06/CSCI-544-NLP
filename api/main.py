@@ -46,6 +46,9 @@ async def upload_document(
     published_at: Optional[date] = Form(default=None),
     effective_from: Optional[date] = Form(default=None),
     effective_to: Optional[date] = Form(default=None),
+    valid_as_of: Optional[date] = Form(default=None),
+    retrieved_at: Optional[date] = Form(default=None),
+    date_evidence: Optional[str] = Form(default=None),
     rule_family: Optional[str] = Form(default=None),
     status: DocumentStatus = Form(default=DocumentStatus.UNKNOWN),
 ):
@@ -59,6 +62,9 @@ async def upload_document(
             published_at=published_at,
             effective_from=effective_from,
             effective_to=effective_to,
+            valid_as_of=valid_as_of,
+            retrieved_at=retrieved_at,
+            date_evidence=date_evidence,
             rule_family=rule_family,
             status=status,
         )

@@ -6,9 +6,10 @@ from unittest.mock import patch
 
 from api import config
 from corpus.batch import ingest_directory
+from corpus.metadata_extraction import enrich_metadata
 from corpus.parser import parse_text
 from corpus.pipeline import ingest_upload
-from corpus.schema import DocumentMetadata, SourceTier
+from corpus.schema import DocumentMetadata, ParsedBlock, SourceTier
 from corpus.selector import select_passages
 from corpus.source_classification import classify_source
 
@@ -51,6 +52,20 @@ class CorpusPipelineTests(unittest.TestCase):
                 effective_from=date(2025, 1, 2),
                 effective_to=date(2025, 1, 1),
             )
+
+    def test_as_of_date_is_only_an_unconfirmed_candidate(self):
+        metadata, candidates = enrich_metadata(
+            DocumentMetadata(original_filename="8 CFR 214.2.pdf"),
+            [
+                ParsedBlock(
+                    text="This edition is up to date as of 12/05/2025.",
+                    block_index=0,
+                )
+            ],
+        )
+
+        self.assertIsNone(metadata.valid_as_of)
+        self.assertEqual(candidates.valid_as_of_candidates, ["12/05/2025"])
 
     def test_rule_passages_are_selected(self):
         with TemporaryDirectory() as temporary_directory:

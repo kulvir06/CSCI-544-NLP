@@ -10,6 +10,7 @@ from pathlib import Path
 
 from corpus.review import submit_review
 from corpus.schema import (
+    CorpusUse,
     DocumentReviewRequest,
     DocumentStatus,
     MetadataCorrections,
@@ -17,8 +18,20 @@ from corpus.schema import (
 )
 
 
-TEXT_CORRECTIONS = ("title", "issuer", "source_url", "rule_family")
-DATE_CORRECTIONS = ("published_at", "effective_from", "effective_to")
+TEXT_CORRECTIONS = (
+    "title",
+    "issuer",
+    "source_url",
+    "rule_family",
+    "date_evidence",
+)
+DATE_CORRECTIONS = (
+    "published_at",
+    "effective_from",
+    "effective_to",
+    "valid_as_of",
+    "retrieved_at",
+)
 
 
 def _request_from_row(row: dict[str, str]) -> DocumentReviewRequest:
@@ -37,6 +50,7 @@ def _request_from_row(row: dict[str, str]) -> DocumentReviewRequest:
 
     return DocumentReviewRequest(
         decision=ReviewDecision(row.get("decision", "").strip().lower()),
+        corpus_use=CorpusUse(row.get("corpus_use", "").strip().lower()),
         reviewer=row.get("reviewer", "").strip(),
         corrections=MetadataCorrections.model_validate(corrections),
         notes=row.get("notes", "").strip() or None,

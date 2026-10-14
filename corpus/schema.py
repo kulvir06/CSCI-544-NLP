@@ -29,6 +29,12 @@ class ReviewDecision(str, Enum):
     REJECTED = "rejected"
 
 
+class CorpusUse(str, Enum):
+    TEMPORAL_AND_MEANING = "temporal_and_meaning"
+    MEANING_ONLY = "meaning_only"
+    EXCLUDED = "excluded"
+
+
 class DocumentMetadata(BaseModel):
     original_filename: str
     title: Optional[str] = None
@@ -37,11 +43,16 @@ class DocumentMetadata(BaseModel):
     published_at: Optional[date] = None
     effective_from: Optional[date] = None
     effective_to: Optional[date] = None
+    valid_as_of: Optional[date] = None
+    retrieved_at: Optional[date] = None
+    date_evidence: Optional[str] = None
     rule_family: Optional[str] = None
     status: DocumentStatus = DocumentStatus.UNKNOWN
 
     @model_validator(mode="after")
     def validate_interval(self) -> "DocumentMetadata":
+        if self.effective_to and not self.effective_from:
+            raise ValueError("effective_to requires effective_from")
         if (
             self.effective_from
             and self.effective_to
@@ -54,6 +65,7 @@ class DocumentMetadata(BaseModel):
 class MetadataCandidates(BaseModel):
     date_mentions: list[str] = Field(default_factory=list)
     effective_date_candidates: list[str] = Field(default_factory=list)
+    valid_as_of_candidates: list[str] = Field(default_factory=list)
     inferred_fields: list[str] = Field(default_factory=list)
 
 
@@ -126,12 +138,16 @@ class MetadataCorrections(BaseModel):
     published_at: Optional[date] = None
     effective_from: Optional[date] = None
     effective_to: Optional[date] = None
+    valid_as_of: Optional[date] = None
+    retrieved_at: Optional[date] = None
+    date_evidence: Optional[str] = None
     rule_family: Optional[str] = None
     status: Optional[DocumentStatus] = None
 
 
 class DocumentReviewRequest(BaseModel):
     decision: ReviewDecision
+    corpus_use: CorpusUse
     reviewer: str = Field(min_length=1)
     corrections: MetadataCorrections = Field(default_factory=MetadataCorrections)
     notes: Optional[str] = None
@@ -140,6 +156,7 @@ class DocumentReviewRequest(BaseModel):
 class DocumentReview(BaseModel):
     document_id: str
     decision: ReviewDecision
+    corpus_use: CorpusUse
     reviewer: str
     reviewed_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc)
@@ -154,5 +171,6 @@ class ReviewQueueItem(BaseModel):
     current_metadata: DocumentMetadata
     current_source_tier: SourceTier
     decision: Optional[ReviewDecision] = None
+    corpus_use: Optional[CorpusUse] = None
     blocking_issues: list[str] = Field(default_factory=list)
     latest_review: Optional[DocumentReview] = None

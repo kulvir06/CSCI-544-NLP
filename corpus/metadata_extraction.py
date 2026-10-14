@@ -30,6 +30,11 @@ EFFECTIVE_PATTERN = re.compile(
     rf"(?:on\s*)?((?:{MONTHS})\s+\d{{1,2}},\s+\d{{4}}|\d{{1,2}}[/-]\d{{1,2}}[/-]\d{{4}})",
     re.I,
 )
+VALID_AS_OF_PATTERN = re.compile(
+    rf"\b(?:up to date as of|current as of|valid as of|as of)\s*"
+    rf"((?:{MONTHS})\s+\d{{1,2}},\s+\d{{4}}|\d{{1,2}}[/-]\d{{1,2}}[/-]\d{{4}})",
+    re.I,
+)
 
 
 def _infer_issuer(filename: str) -> Optional[str]:
@@ -106,9 +111,13 @@ def enrich_metadata(
     effective_candidates = list(
         dict.fromkeys(match.group(1) for match in EFFECTIVE_PATTERN.finditer(context))
     )[:10]
+    valid_as_of_candidates = list(
+        dict.fromkeys(match.group(1) for match in VALID_AS_OF_PATTERN.finditer(context))
+    )[:10]
 
     return metadata, MetadataCandidates(
         date_mentions=date_mentions,
         effective_date_candidates=effective_candidates,
+        valid_as_of_candidates=valid_as_of_candidates,
         inferred_fields=inferred_fields,
     )

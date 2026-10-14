@@ -10,6 +10,7 @@ from pathlib import Path
 
 from api import config
 from corpus.schema import (
+    CorpusUse,
     DocumentMetadata,
     DocumentReview,
     DocumentReviewRequest,
@@ -55,12 +56,34 @@ def _blocking_issues(
     issues: list[str] = []
     if not metadata.source_url:
         issues.append("missing_source_url")
-    if not metadata.effective_from:
-        issues.append("missing_effective_date")
     if metadata.status == DocumentStatus.UNKNOWN:
         issues.append("unknown_document_status")
     if source_tier == SourceTier.UNKNOWN:
         issues.append("unknown_source_authority")
+    if not metadata.effective_from and not metadata.valid_as_of:
+        issues.append("missing_temporal_basis")
+    if (metadata.effective_from or metadata.valid_as_of) and not metadata.date_evidence:
+        issues.append("missing_date_evidence")
+    return issues
+
+
+def _approval_blockers(
+    metadata: DocumentMetadata,
+    source_tier: SourceTier,
+    corpus_use: CorpusUse,
+) -> list[str]:
+    issues = _blocking_issues(metadata, source_tier)
+    if corpus_use == CorpusUse.MEANING_ONLY:
+        return [
+            issue
+            for issue in issues
+            if issue
+            not in {
+                "missing_temporal_basis",
+                "missing_date_evidence",
+                "unknown_document_status",
+            }
+        ]
     return issues
 
 
@@ -93,6 +116,7 @@ def build_review_queue(include_resolved: bool = False) -> list[ReviewQueueItem]:
                 current_metadata=metadata,
                 current_source_tier=source_tier,
                 decision=decision,
+                corpus_use=latest.corpus_use if latest else None,
                 blocking_issues=_blocking_issues(metadata, source_tier),
                 latest_review=latest,
             )
@@ -114,8 +138,18 @@ def submit_review(
     base_metadata = latest.metadata if latest else documents[document_id].metadata
     metadata = _merge_metadata(base_metadata, request)
     source_tier = classify_source(metadata)
-    blockers = _blocking_issues(metadata, source_tier)
+    blockers = _approval_blockers(metadata, source_tier, request.corpus_use)
 
+    if (
+        request.decision == ReviewDecision.APPROVED
+        and request.corpus_use == CorpusUse.EXCLUDED
+    ):
+        raise ValueError("Approved documents cannot use corpus_use=excluded")
+    if (
+        request.decision == ReviewDecision.REJECTED
+        and request.corpus_use != CorpusUse.EXCLUDED
+    ):
+        raise ValueError("Rejected documents must use corpus_use=excluded")
     if request.decision == ReviewDecision.APPROVED and blockers:
         raise ValueError(
             "Cannot approve document while metadata issues remain: "
@@ -125,6 +159,7 @@ def submit_review(
     review = DocumentReview(
         document_id=document_id,
         decision=request.decision,
+        corpus_use=request.corpus_use,
         reviewer=request.reviewer.strip(),
         metadata=metadata,
         source_tier=source_tier,
@@ -136,10 +171,13 @@ def submit_review(
     return review
 
 
-def load_retrieval_ready_documents() -> list[DocumentReview]:
-    """Return only the latest explicitly approved document versions."""
+def load_retrieval_ready_documents(
+    corpus_use: CorpusUse | None = None,
+) -> list[DocumentReview]:
+    """Return the latest approved versions, optionally filtered by use."""
     return [
         review
         for review in load_latest_reviews().values()
         if review.decision == ReviewDecision.APPROVED
+        and (corpus_use is None or review.corpus_use == corpus_use)
     ]

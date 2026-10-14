@@ -25,14 +25,16 @@ Export the pending metadata-review queue for the team:
 python -m scripts.export_review_queue
 ```
 
-Fill the `decision` (`approved` or `rejected`), `reviewer`, and missing metadata
-columns, then import the reviewed file:
+Fill the `decision` (`approved` or `rejected`), `corpus_use`, `reviewer`, and
+known metadata columns, then import the reviewed file:
 
 ```bash
 python -m scripts.import_review_queue --input data/reports/metadata-review-queue.csv
 ```
 
-A document is retrieval-ready only after a reviewer confirms its source URL,
-effective start date, document status, and source authority. Review decisions
-are append-only so corrections remain auditable. The application records URLs
-as provenance but never opens them.
+A document can be approved as `meaning_only` without an effective date. A
+`temporal_and_meaning` document needs either an explicit effective start date or
+a confirmed `valid_as_of` snapshot date, plus a short `date_evidence` note.
+Unusable documents are marked `excluded`. Review decisions are append-only so
+corrections remain auditable. The application records URLs as provenance but
+never opens them.

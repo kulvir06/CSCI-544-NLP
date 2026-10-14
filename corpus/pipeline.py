@@ -31,8 +31,10 @@ def ingest_upload(
     review_flags: list[str] = []
     if not metadata.source_url:
         review_flags.append("missing_source_url")
-    if not metadata.effective_from:
-        review_flags.append("missing_effective_date")
+    if not metadata.effective_from and not metadata.valid_as_of:
+        review_flags.append("missing_temporal_basis")
+    if (metadata.effective_from or metadata.valid_as_of) and not metadata.date_evidence:
+        review_flags.append("missing_date_evidence")
     if source_tier == SourceTier.UNKNOWN:
         review_flags.append("unknown_source_authority")
     if not passages:

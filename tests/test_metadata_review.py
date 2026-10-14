@@ -14,6 +14,7 @@ from corpus.review import (
     submit_review,
 )
 from corpus.schema import (
+    CorpusUse,
     DocumentMetadata,
     DocumentReviewRequest,
     DocumentStatus,
@@ -57,11 +58,12 @@ class MetadataReviewTests(unittest.TestCase):
 
         self.assertEqual(len(queue), 1)
         self.assertIn("missing_source_url", queue[0].blocking_issues)
-        self.assertIn("missing_effective_date", queue[0].blocking_issues)
+        self.assertIn("missing_temporal_basis", queue[0].blocking_issues)
 
     def test_approval_requires_complete_temporal_provenance(self):
         request = DocumentReviewRequest(
             decision=ReviewDecision.APPROVED,
+            corpus_use=CorpusUse.TEMPORAL_AND_MEANING,
             reviewer="Team Member",
         )
 
@@ -71,11 +73,13 @@ class MetadataReviewTests(unittest.TestCase):
     def test_complete_approval_is_audited_and_retrieval_ready(self):
         request = DocumentReviewRequest(
             decision=ReviewDecision.APPROVED,
+            corpus_use=CorpusUse.TEMPORAL_AND_MEANING,
             reviewer="Team Member",
             corrections=MetadataCorrections(
                 issuer="USCIS",
                 source_url="https://www.uscis.gov/example",
                 effective_from=date(2025, 1, 1),
+                date_evidence="The uploaded notice states effective January 1, 2025.",
                 status=DocumentStatus.CURRENT,
                 rule_family="stem_opt",
             ),
@@ -88,6 +92,26 @@ class MetadataReviewTests(unittest.TestCase):
         self.assertEqual(len(load_retrieval_ready_documents()), 1)
         self.assertEqual(
             len(config.REVIEW_LOG_PATH.read_text(encoding="utf-8").splitlines()),
+            1,
+        )
+
+    def test_meaning_only_approval_does_not_require_a_date(self):
+        request = DocumentReviewRequest(
+            decision=ReviewDecision.APPROVED,
+            corpus_use=CorpusUse.MEANING_ONLY,
+            reviewer="Team Member",
+            corrections=MetadataCorrections(
+                issuer="USCIS",
+                source_url="https://www.uscis.gov/example",
+            ),
+        )
+
+        review = submit_review(self.document_id, request)
+
+        self.assertEqual(review.corpus_use, CorpusUse.MEANING_ONLY)
+        self.assertIsNone(review.metadata.effective_from)
+        self.assertEqual(
+            len(load_retrieval_ready_documents(CorpusUse.MEANING_ONLY)),
             1,
         )
 
@@ -111,8 +135,10 @@ class MetadataReviewTests(unittest.TestCase):
             {
                 "source_url": "https://www.uscis.gov/example",
                 "effective_from": "2025-01-01",
+                "date_evidence": "Effective date printed in the uploaded notice.",
                 "status": "current",
                 "decision": "approved",
+                "corpus_use": "temporal_and_meaning",
                 "reviewer": "Team Member",
                 "notes": "Verified from uploaded source.",
             }
