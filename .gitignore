@@ -5,3 +5,16 @@ rules.txt
 help.md
 chromadb
 documentation
+.env
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.DS_Store
+data/raw/*
+data/normalized/*
+data/passages/*
+data/manifests/documents.jsonl
+!data/raw/.gitkeep
+!data/normalized/.gitkeep
+!data/passages/.gitkeep
+!data/manifests/.gitkeep
