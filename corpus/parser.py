@@ -54,12 +54,23 @@ def parse_html(path: Path) -> list[ParsedBlock]:
 
     blocks: list[ParsedBlock] = []
     current_section: str | None = None
-    for node in soup.find_all(["h1", "h2", "h3", "h4", "p", "li"]):
+    for node in soup.find_all(["h1", "h2", "h3", "h4", "p", "li", "pre"]):
         text = _clean(node.get_text(" ", strip=True))
         if not text:
             continue
         if node.name in {"h1", "h2", "h3", "h4"}:
             current_section = text
+            continue
+        if node.name == "pre":
+            # GovInfo Federal Register pages place the complete notice inside a
+            # single PRE element. Preserve its original line breaks long enough
+            # to split the notice into reviewable blocks instead of one enormous
+            # passage (or no passages at all).
+            raw_text = node.get_text("\n", strip=True)
+            for block in _paragraph_blocks(raw_text):
+                block.section = current_section
+                block.block_index = len(blocks)
+                blocks.append(block)
             continue
         if len(text) < 20:
             continue

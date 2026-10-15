@@ -7,7 +7,7 @@ from unittest.mock import patch
 from api import config
 from corpus.batch import ingest_directory
 from corpus.metadata_extraction import enrich_metadata
-from corpus.parser import parse_text
+from corpus.parser import parse_html, parse_text
 from corpus.pipeline import ingest_upload
 from corpus.schema import DocumentMetadata, ParsedBlock, SourceTier
 from corpus.selector import select_passages
@@ -81,6 +81,26 @@ class CorpusPipelineTests(unittest.TestCase):
         self.assertEqual(len(passages), 1)
         self.assertIn("topic:opt", passages[0].selection_reasons)
         self.assertIn("rule:obligation", passages[0].selection_reasons)
+
+    def test_govinfo_preformatted_notice_is_parsed_and_selected(self):
+        with TemporaryDirectory() as temporary_directory:
+            path = Path(temporary_directory) / "federal-register.html"
+            path.write_text(
+                "<html><body><pre>"
+                "Federal Register final rule.\n\n"
+                "F-1 students on STEM OPT must submit Form I-983 for a "
+                "24 month extension.\n\n"
+                "The employer must participate in E-Verify."
+                "</pre></body></html>",
+                encoding="utf-8",
+            )
+
+            blocks = parse_html(path)
+            passages = select_passages("govinfo-doc", blocks)
+
+        self.assertGreaterEqual(len(blocks), 2)
+        self.assertEqual(len(passages), 1)
+        self.assertIn("Form I-983", passages[0].text)
 
     def test_network_ingestion_is_disabled(self):
         self.assertFalse(config.NETWORK_INGESTION_ENABLED)
