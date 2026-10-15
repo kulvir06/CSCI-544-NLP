@@ -55,7 +55,7 @@ class OllamaClient:
                 "model": self.temporal_model,
                 "stream": False,
                 "format": ClaimExtraction.model_json_schema(),
-                "options": {"temperature": 0},
+                "options": {"temperature": 0, "num_predict": 1200},
                 "messages": [
                     {
                         "role": "system",
