@@ -23,7 +23,10 @@ result is expected until corpus metadata has been reviewed and the index rebuilt
 
 ### **Project Description**
 
-Engineered an AI-driven immigration assistant for F-1 students using a retrieval-augmented generation (RAG) pipeline. Implemented document chunking and vector-based semantic search to retrieve top-K relevant immigration policy content, followed by response generation using a local LLM. Integrated a secondary LLM-based evaluation agent to review, score, and refine responses before presenting them to users, improving accuracy and relevance.
+This research prototype tests whether an F-1 employment explanation is safe to
+release. It retrieves only reviewed passages, checks whether the source version
+applies to the relevant date, and verifies that legally important facts survive
+simplification. Unsafe drafts are blocked and uncertain cases cause abstention.
 
 ### Corpus Safety Policy
 
@@ -47,35 +50,35 @@ as a retrieval distractor, but it cannot override primary federal material.
 
 **AI / NLP:**
 
-- Retrieval-Augmented Generation (RAG)
-- Sentence Transformers (`all-MiniLM-L6-v2`)
-- Large Language Models (Mistral via Ollama)
-- Multi-Agent LLM Systems
+- Rule-aware document ingestion and passage selection
+- BM25 passage retrieval
+- Temporal applicability verification
+- Atomic-fact and meaning-preservation verification
+- Targeted negative-case evaluation
 
-**Vector Database & Storage:**
+**Storage:**
 
-- ChromaDB
-- Local document storage
+- Reviewed local JSONL passage index
+- Auditable document metadata and review log
 
 **Search & Ranking:**
 
-- Semantic Search
-- Cosine Similarity
+- BM25 lexical ranking
 - Top-K Retrieval
 
 **Systems & Tools:**
 
-- Ollama
-- Prompt Engineering
+- FastAPI
+- Local HTML dashboard
+- Offline, upload-only corpus workflow
 
 ---
 
 ### **Skills Demonstrated**
 
-- Generative AI Application Development
-- Vector Databases & Embeddings
-- LLM Orchestration & Evaluation
-- AI Agent Design (Generation + Judge Agent)
+- Safety-oriented NLP evaluation
+- Temporal information retrieval
+- Meaning-preservation analysis
 - Information Retrieval Systems
 - Natural Language Processing (NLP)
 - Backend AI System Design

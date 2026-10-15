@@ -7,7 +7,7 @@ from typing import Optional
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, ValidationError
+from pydantic import ValidationError
 import uvicorn
 from api import config
 from corpus.pipeline import ingest_upload
@@ -73,10 +73,6 @@ def health():
         "network_ingestion_enabled": config.NETWORK_INGESTION_ENABLED,
         "supported_upload_types": sorted(config.SUPPORTED_UPLOAD_SUFFIXES),
     }
-
-class UserQuery(BaseModel):
-    query: str
-
 
 @app.post("/documents/upload", response_model=IngestionResult)
 async def upload_document(
@@ -145,22 +141,6 @@ def verify_explanation_safety(request: SafetyVerificationRequest):
 @app.post("/prototype/query", response_model=PrototypeResponse)
 def prototype_query(request: PrototypeRequest):
     return run_prototype(request)
-
-@app.post("/query/")
-async def user_query(q: UserQuery):
-    # Keep optional LLM/vector dependencies out of the upload-only corpus path.
-    from api import llm, orchestrator
-
-    res = orchestrator.get_context(q.query)
-    enhanced_query = orchestrator.enhance_user_query(
-        query = q.query, 
-        context = res["context"],
-        sources = res["sources"]
-    )
-    ollama_client = llm.create_ollama_client()
-    res = await llm.prompt_response(enhanced_query, ollama_client)
-    # print(res)
-    return res
 
 if __name__ == "__main__":
     uvicorn.run(

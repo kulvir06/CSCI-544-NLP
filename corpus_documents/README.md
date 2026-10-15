@@ -8,6 +8,9 @@ The current F-1 corpus lives in `f1-employment-and-extensions/`. Downloaded HTML
 files are intentionally ignored by Git; provenance and review decisions are
 stored separately by the corpus review workflow.
 
+Older PDF samples retained from the removed ChromaDB prototype live in
+`legacy-sample-pdfs/`. They are not part of the new eight-document ingestion run.
+
 Build the local corpus with:
 
 ```bash
