@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 import hashlib
 import json
 from pathlib import Path
@@ -120,13 +121,32 @@ def _valid_claim(claim: ExtractedClaim, passage: Passage) -> bool:
     return bool(normalized_quote) and normalized_quote in normalized_source
 
 
+def _analyze_passage(
+    model: TemporalModel,
+    item: tuple[StoredDocument, list[Passage], int, Passage],
+) -> tuple[str, list[ExtractedClaim], bool]:
+    """Analyze one passage; safe to execute in a worker thread."""
+    document, passages, index, passage = item
+    context = _context(passages, index)
+    extraction, cache_hit = _extract_with_cache(
+        model, document, passage, context
+    )
+    accepted = [
+        claim for claim in extraction.claims if _valid_claim(claim, passage)
+    ]
+    return context, accepted, cache_hit
+
+
 def build_temporal_index(
     model: TemporalModel,
     document_ids: set[str] | None = None,
     max_passages: int | None = None,
+    workers: int = 1,
     progress: Callable[[str], None] | None = None,
 ) -> TemporalIndexReport:
     """Build an automatic claim index without consulting the human review log."""
+    if workers < 1:
+        raise ValueError("workers must be at least 1")
     ensure_data_directories()
     documents = _load_manifest_documents()
     if document_ids is not None:
@@ -156,36 +176,85 @@ def build_temporal_index(
         progress(
             f"Found {len(documents)} documents and {total_passages} passages to analyze."
         )
+    effective_workers = min(workers, total_passages) if total_passages else 1
+    if progress:
+        label = "worker" if effective_workers == 1 else "parallel workers"
+        progress(f"Using {effective_workers} {label}.")
 
-    for position, (document, passages, index, passage) in enumerate(work, start=1):
-        source_passages += 1
-        context = _context(passages, index)
+    # Keep only `effective_workers` tasks in flight. This bounds memory usage,
+    # makes Ctrl+C responsive, and avoids flooding Ollama's request queue.
+    results: dict[
+        int, tuple[StoredDocument, Passage, str, list[ExtractedClaim]]
+    ] = {}
+    executor = ThreadPoolExecutor(
+        max_workers=effective_workers,
+        thread_name_prefix="temporal-extraction",
+    )
+    in_flight: dict[
+        Future[tuple[str, list[ExtractedClaim], bool]],
+        tuple[int, StoredDocument, Passage],
+    ] = {}
+    next_offset = 0
+
+    def submit_next() -> None:
+        nonlocal next_offset
+        if next_offset >= total_passages:
+            return
+        position = next_offset + 1
+        item = work[next_offset]
+        document, _, _, passage = item
         if progress:
             progress(f"[{position}/{total_passages}] Analyzing {passage.passage_id} ...")
-        try:
-            extraction, cache_hit = _extract_with_cache(
-                model, document, passage, context
-            )
-        except Exception as error:
-            failed_passages += 1
-            failures.append(f"{passage.passage_id}: {error}")
-            if progress:
-                progress(f"[{position}/{total_passages}] Failed: {error}")
-            continue
-        accepted = [claim for claim in extraction.claims if _valid_claim(claim, passage)]
-        if not accepted:
-            skipped_passages += 1
-        else:
-            pending.extend(
-                (document, passage, context, claim) for claim in accepted
-            )
-        if progress:
-            source = "cache" if cache_hit else "model"
-            elapsed = time.monotonic() - started_at
-            progress(
-                f"[{position}/{total_passages}] Done via {source}: "
-                f"{len(accepted)} accepted claim(s); elapsed {elapsed / 60:.1f} min"
-            )
+        future = executor.submit(_analyze_passage, model, item)
+        in_flight[future] = (position, document, passage)
+        next_offset += 1
+
+    for _ in range(effective_workers):
+        submit_next()
+
+    try:
+        while in_flight:
+            completed, _ = wait(in_flight, return_when=FIRST_COMPLETED)
+            for future in sorted(completed, key=lambda item: in_flight[item][0]):
+                position, document, passage = in_flight.pop(future)
+                source_passages += 1
+                try:
+                    context, accepted, cache_hit = future.result()
+                except Exception as error:
+                    failed_passages += 1
+                    failures.append(f"{passage.passage_id}: {error}")
+                    if progress:
+                        progress(
+                            f"[{source_passages}/{total_passages} complete] "
+                            f"{passage.passage_id} failed: {error}"
+                        )
+                else:
+                    if not accepted:
+                        skipped_passages += 1
+                    results[position] = (document, passage, context, accepted)
+                    if progress:
+                        source = "cache" if cache_hit else "model"
+                        elapsed = time.monotonic() - started_at
+                        progress(
+                            f"[{source_passages}/{total_passages} complete] "
+                            f"{passage.passage_id}: Done via {source}: "
+                            f"{len(accepted)} accepted claim(s); "
+                            f"elapsed {elapsed / 60:.1f} min"
+                        )
+                submit_next()
+    except BaseException:
+        for future in in_flight:
+            future.cancel()
+        executor.shutdown(wait=False, cancel_futures=True)
+        raise
+    else:
+        executor.shutdown(wait=True)
+
+    # Completion order is nondeterministic, so restore corpus order before
+    # assigning stable claim IDs and writing the index.
+    for position in sorted(results):
+        document, passage, context, accepted = results[position]
+        pending.extend((document, passage, context, claim) for claim in accepted)
 
     embeddings: list[list[float]] = []
     for start in range(0, len(pending), 32):

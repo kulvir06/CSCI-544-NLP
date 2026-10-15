@@ -33,7 +33,18 @@ def main() -> None:
         default=None,
         help="Development limit; omit to process the full corpus.",
     )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=2,
+        help=(
+            "Concurrent Ollama requests (default: 2). Use 1 to disable "
+            "parallel processing."
+        ),
+    )
     arguments = parser.parse_args()
+    if arguments.workers < 1:
+        parser.error("--workers must be at least 1")
     document_ids = (
         document_ids_for_directory(arguments.input_dir)
         if arguments.input_dir else None
@@ -52,6 +63,7 @@ def main() -> None:
             client,
             document_ids=document_ids,
             max_passages=arguments.max_passages,
+            workers=arguments.workers,
             progress=lambda message: print(message, flush=True),
         )
     except KeyboardInterrupt:

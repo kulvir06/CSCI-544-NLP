@@ -57,21 +57,26 @@ python3 -m scripts.build_corpus \
   --input-dir corpus_documents/f1-employment-and-extensions
 
 python3 -m scripts.build_temporal_index \
-  --input-dir corpus_documents/f1-employment-and-extensions
+  --input-dir corpus_documents/f1-employment-and-extensions \
+  --workers 2
 ```
 
 The second command prints live progress for every passage. It can take many
 hours on its first full run because each passage is analyzed locally. Valid
 model responses are cached in `data/temporal_cache`, so pressing `Ctrl+C` is
 safe: rerun the same command later and completed passages will be loaded from
-the cache.
+the cache. The default is two concurrent requests. Ollama must also be configured
+with `OLLAMA_NUM_PARALLEL=2` to execute them concurrently rather than queue them.
+On a 16 GB machine, start with two workers; additional workers can exhaust memory
+and reduce performance.
 
 For a small development run:
 
 ```bash
 python3 -m scripts.build_temporal_index \
   --input-dir corpus_documents/f1-employment-and-extensions \
-  --max-passages 20
+  --max-passages 20 \
+  --workers 2
 ```
 
 Do not use a partial index for final evaluation.

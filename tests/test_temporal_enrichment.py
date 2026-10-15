@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 from api import config
 from corpus.pipeline import ingest_upload
-from corpus.schema import DocumentMetadata, DocumentStatus, SourceTier
+from corpus.schema import DocumentMetadata, DocumentStatus, Passage, SourceTier
 from retrieval.schema import RetrievalRequest, TemporalVerdict
 from retrieval.search import retrieve
 from temporal.enrichment import build_temporal_index, load_temporal_claims
@@ -120,6 +120,42 @@ class TemporalEnrichmentTests(unittest.TestCase):
             progress=messages.append,
         )
         self.assertIn("Done via cache", "\n".join(messages))
+
+    def test_parallel_workers_preserve_passage_order(self):
+        result = ingest_upload(
+            "rule.txt",
+            b"The final rule provides a 24 month STEM OPT extension.",
+            DocumentMetadata(original_filename="rule.txt"),
+        )
+        passages = [
+            Passage(
+                passage_id=f"{result.document.document_id}-p{number:05d}",
+                document_id=result.document.document_id,
+                text=(
+                    "The previous STEM OPT rule provided a 17 month extension. "
+                    "The final rule provides a 24 month STEM OPT extension."
+                ),
+                block_index=number,
+                relevance_score=5.0,
+            )
+            for number in (1, 2)
+        ]
+        messages: list[str] = []
+
+        with patch("temporal.enrichment._load_passages", return_value=passages):
+            report = build_temporal_index(
+                FakeTemporalModel(),
+                document_ids={result.document.document_id},
+                workers=2,
+                progress=messages.append,
+            )
+        claims = load_temporal_claims()
+
+        self.assertEqual(report.source_passages, 2)
+        self.assertEqual(report.indexed_claims, 4)
+        self.assertIn("Using 2 parallel workers", "\n".join(messages))
+        self.assertEqual(claims[0].source_passage_id, passages[0].passage_id)
+        self.assertEqual(claims[2].source_passage_id, passages[1].passage_id)
 
     def test_temporal_filter_runs_before_claim_ranking(self):
         result = ingest_upload(
