@@ -246,6 +246,21 @@ class TemporalRetrievalTests(unittest.TestCase):
                 document_status=DocumentStatus.HISTORICAL,
             ),
             IndexedPassage(
+                passage_id="new-rule-background-p1",
+                document_id="new-rule",
+                text=(
+                    "The prior rule allowed filing during a 60-day grace period, "
+                    "limited unemployment to 90 days, and provided students with "
+                    "17-month STEM OPT extensions another 30 days."
+                ),
+                passage_relevance_score=9.0,
+                source_tier=SourceTier.PRIMARY_LAW,
+                corpus_use=CorpusUse.TEMPORAL_AND_MEANING,
+                effective_from=date(2016, 5, 10),
+                date_evidence="New rule effective date.",
+                document_status=DocumentStatus.HISTORICAL,
+            ),
+            IndexedPassage(
                 passage_id="guidance-p1",
                 document_id="guidance",
                 text="Current STEM OPT extension guidance discusses how long employment may continue.",

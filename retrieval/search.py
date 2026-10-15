@@ -22,6 +22,13 @@ from retrieval.schema import (
 
 TOKEN_PATTERN = re.compile(r"[A-Za-z0-9]+(?:-[A-Za-z0-9]+)?")
 DURATION_QUERY_PATTERN = re.compile(r"\b(how long|duration|length)\b", re.I)
+OPERATIVE_DURATION_PATTERN = re.compile(
+    r"\b(?:final|interim) rule sets? the duration\b.{0,120}\b\d+\s*[- ]?months?\b|"
+    r"\bextension (?:will be|is) for (?:an additional |up to )?"
+    r"\d+\s*[- ]?months?\b|"
+    r"\bextension begins\b.{0,180}\bends? \d+\s*[- ]?months?\b",
+    re.I,
+)
 NON_OPERATIVE_DISCUSSION_PATTERN = re.compile(
     r"\b(commenters?|recommended|recommendation|alternative considered)\b|"
     r"^(?:comment|response)\.",
@@ -104,6 +111,11 @@ def _bm25_scores(query: str, passages: list[IndexedPassage]) -> list[float]:
                 and NON_OPERATIVE_DISCUSSION_PATTERN.search(passage.text)
             ):
                 score *= 0.6
+            if (
+                DURATION_QUERY_PATTERN.search(query)
+                and OPERATIVE_DURATION_PATTERN.search(passage.text)
+            ):
+                score += 5.0
             score += min(passage.passage_relevance_score, 10.0) * 0.001
         scores.append(score)
     return scores
