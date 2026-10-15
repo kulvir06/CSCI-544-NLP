@@ -2,6 +2,7 @@ node_modules
 local-setup-guide.md
 *.pdf
 vector/data/document-corpus/*.html
+corpus_documents/f1-employment-and-extensions/*.html
 rules.txt
 help.md
 chromadb
