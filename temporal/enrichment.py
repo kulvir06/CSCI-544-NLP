@@ -5,7 +5,8 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
-from typing import Protocol
+import time
+from typing import Callable, Protocol
 
 from api import config
 from corpus.schema import Passage, StoredDocument
@@ -101,13 +102,16 @@ def _extract_with_cache(
     document: StoredDocument,
     passage: Passage,
     context: str,
-) -> ClaimExtraction:
+) -> tuple[ClaimExtraction, bool]:
     path = _cache_path(passage, model.temporal_model)
     if path.exists():
-        return ClaimExtraction.model_validate_json(path.read_text(encoding="utf-8"))
+        return (
+            ClaimExtraction.model_validate_json(path.read_text(encoding="utf-8")),
+            True,
+        )
     extraction = model.extract_claims(_prompt(document, passage, context))
     path.write_text(extraction.model_dump_json(indent=2), encoding="utf-8")
-    return extraction
+    return extraction, False
 
 
 def _valid_claim(claim: ExtractedClaim, passage: Passage) -> bool:
@@ -120,6 +124,7 @@ def build_temporal_index(
     model: TemporalModel,
     document_ids: set[str] | None = None,
     max_passages: int | None = None,
+    progress: Callable[[str], None] | None = None,
 ) -> TemporalIndexReport:
     """Build an automatic claim index without consulting the human review log."""
     ensure_data_directories()
@@ -129,36 +134,67 @@ def build_temporal_index(
             key: value for key, value in documents.items() if key in document_ids
         }
 
+    work: list[tuple[StoredDocument, list[Passage], int, Passage]] = []
+    for document in documents.values():
+        passages = _load_passages(document.document_id)
+        for index, passage in enumerate(passages):
+            work.append((document, passages, index, passage))
+            if max_passages is not None and len(work) >= max_passages:
+                break
+        if max_passages is not None and len(work) >= max_passages:
+            break
+
     pending: list[tuple[StoredDocument, Passage, str, ExtractedClaim]] = []
     source_passages = 0
     skipped_passages = 0
     failed_passages = 0
     failures: list[str] = []
 
-    for document in documents.values():
-        passages = _load_passages(document.document_id)
-        for index, passage in enumerate(passages):
-            if max_passages is not None and source_passages >= max_passages:
-                break
-            source_passages += 1
-            context = _context(passages, index)
-            try:
-                extraction = _extract_with_cache(model, document, passage, context)
-            except Exception as error:
-                failed_passages += 1
-                failures.append(f"{passage.passage_id}: {error}")
-                continue
-            accepted = [claim for claim in extraction.claims if _valid_claim(claim, passage)]
-            if not accepted:
-                skipped_passages += 1
-                continue
-            pending.extend((document, passage, context, claim) for claim in accepted)
-        if max_passages is not None and source_passages >= max_passages:
-            break
+    total_passages = len(work)
+    started_at = time.monotonic()
+    if progress:
+        progress(
+            f"Found {len(documents)} documents and {total_passages} passages to analyze."
+        )
+
+    for position, (document, passages, index, passage) in enumerate(work, start=1):
+        source_passages += 1
+        context = _context(passages, index)
+        if progress:
+            progress(f"[{position}/{total_passages}] Analyzing {passage.passage_id} ...")
+        try:
+            extraction, cache_hit = _extract_with_cache(
+                model, document, passage, context
+            )
+        except Exception as error:
+            failed_passages += 1
+            failures.append(f"{passage.passage_id}: {error}")
+            if progress:
+                progress(f"[{position}/{total_passages}] Failed: {error}")
+            continue
+        accepted = [claim for claim in extraction.claims if _valid_claim(claim, passage)]
+        if not accepted:
+            skipped_passages += 1
+        else:
+            pending.extend(
+                (document, passage, context, claim) for claim in accepted
+            )
+        if progress:
+            source = "cache" if cache_hit else "model"
+            elapsed = time.monotonic() - started_at
+            progress(
+                f"[{position}/{total_passages}] Done via {source}: "
+                f"{len(accepted)} accepted claim(s); elapsed {elapsed / 60:.1f} min"
+            )
 
     embeddings: list[list[float]] = []
     for start in range(0, len(pending), 32):
-        embeddings.extend(model.embed([item[3].claim_text for item in pending[start:start + 32]]))
+        end = min(start + 32, len(pending))
+        if progress:
+            progress(f"Embedding claims {start + 1}-{end} of {len(pending)} ...")
+        embeddings.extend(
+            model.embed([item[3].claim_text for item in pending[start:end]])
+        )
 
     claims: list[TemporalClaim] = []
     for position, ((document, passage, context, extracted), embedding) in enumerate(
@@ -199,6 +235,8 @@ def build_temporal_index(
     config.RETRIEVAL_INDEX_PATH.write_text(
         f"{body}\n" if body else "", encoding="utf-8"
     )
+    if progress:
+        progress(f"Index written to {config.RETRIEVAL_INDEX_PATH}")
     return TemporalIndexReport(
         source_documents=len(documents),
         source_passages=source_passages,

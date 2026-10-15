@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+import sys
 
 from temporal.enrichment import build_temporal_index, document_ids_for_directory
 from temporal.ollama import OllamaClient
@@ -46,11 +47,21 @@ def main() -> None:
             "Missing Ollama model(s): " + ", ".join(missing)
             + ". Install them with `ollama pull <model>` and run again."
         )
-    report = build_temporal_index(
-        client,
-        document_ids=document_ids,
-        max_passages=arguments.max_passages,
-    )
+    try:
+        report = build_temporal_index(
+            client,
+            document_ids=document_ids,
+            max_passages=arguments.max_passages,
+            progress=lambda message: print(message, flush=True),
+        )
+    except KeyboardInterrupt:
+        print(
+            "\nStopped. Completed passage analyses are cached; run the same "
+            "command again to resume.",
+            file=sys.stderr,
+            flush=True,
+        )
+        raise SystemExit(130)
     print(report.model_dump_json(indent=2))
 
 

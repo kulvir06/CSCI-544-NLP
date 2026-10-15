@@ -95,6 +95,32 @@ class TemporalEnrichmentTests(unittest.TestCase):
         self.assertEqual(claims[0].temporal_role, TemporalRole.HISTORICAL)
         self.assertEqual(claims[1].temporal_role, TemporalRole.OPERATIVE)
 
+    def test_build_reports_live_progress_and_cache_reuse(self):
+        result = ingest_upload(
+            "rule.txt",
+            b"The final rule provides a 24 month STEM OPT extension.",
+            DocumentMetadata(original_filename="rule.txt"),
+        )
+        messages: list[str] = []
+
+        build_temporal_index(
+            FakeTemporalModel(),
+            document_ids={result.document.document_id},
+            progress=messages.append,
+        )
+        first_run = "\n".join(messages)
+        self.assertIn("Analyzing", first_run)
+        self.assertIn("Done via model", first_run)
+        self.assertIn("Index written", first_run)
+
+        messages.clear()
+        build_temporal_index(
+            FakeTemporalModel(),
+            document_ids={result.document.document_id},
+            progress=messages.append,
+        )
+        self.assertIn("Done via cache", "\n".join(messages))
+
     def test_temporal_filter_runs_before_claim_ranking(self):
         result = ingest_upload(
             "stem-rule.txt",
