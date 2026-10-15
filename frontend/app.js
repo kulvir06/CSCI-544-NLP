@@ -16,7 +16,7 @@ const labels = {
   answered: "Answer released",
   unsafe_blocked: "Unsafe draft blocked",
   abstained: "System abstained",
-  no_evidence: "No reviewed evidence",
+  no_evidence: "No applicable evidence",
 };
 
 const toneFor = (value) => {
@@ -91,7 +91,7 @@ function renderEvidence(data) {
   document.querySelector("#hit-count").textContent = `${hits.length} hit${hits.length === 1 ? "" : "s"}`;
   const list = document.querySelector("#evidence-list");
   if (!hits.length) {
-    list.innerHTML = `<p class="no-data">The approved index did not contain a sufficiently relevant passage. Review and approve corpus metadata, then rebuild the retrieval index.</p>`;
+    list.innerHTML = `<p class="no-data">The automatic temporal index did not contain a sufficiently relevant claim. Build the temporal index or inspect claims with unknown dates.</p>`;
     return;
   }
 
@@ -109,7 +109,9 @@ function renderEvidence(data) {
           <strong>${escapeHtml(passage.title || "Untitled document")}</strong>
           <span>·</span><span>${escapeHtml(passage.issuer || "Unknown issuer")}</span>
           <span>·</span><span>${page}</span>
-          <span>·</span><span>BM25 ${hit.score.toFixed(3)}</span>
+          <span>·</span><span>${escapeHtml(data.retrieval.ranking_method)} ${hit.score.toFixed(3)}</span>
+          ${passage.temporal_role ? badge(humanize(passage.temporal_role), toneFor(hit.temporal_status)) : ""}
+          ${passage.temporal_confidence != null ? `<span>· temporal confidence ${Math.round(passage.temporal_confidence * 100)}%</span>` : ""}
           ${badge(humanize(hit.temporal_status), toneFor(hit.temporal_status))}
           ${source}
         </div>

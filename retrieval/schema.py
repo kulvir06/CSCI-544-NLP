@@ -46,6 +46,11 @@ class IndexedPassage(BaseModel):
     valid_as_of: Optional[date] = None
     date_evidence: Optional[str] = None
     document_status: DocumentStatus
+    source_passage_id: Optional[str] = None
+    temporal_role: Optional[str] = None
+    temporal_confidence: Optional[float] = None
+    temporal_evidence: Optional[str] = None
+    extraction_method: Optional[str] = None
 
 
 class IndexBuildReport(BaseModel):
@@ -65,6 +70,8 @@ class RetrievalRequest(BaseModel):
 class RetrievalHit(BaseModel):
     passage: IndexedPassage
     score: float
+    lexical_score: Optional[float] = None
+    semantic_score: Optional[float] = None
     temporal_status: PassageTemporalStatus
 
 
@@ -73,6 +80,5 @@ class RetrievalResponse(BaseModel):
     relevant_date: Optional[date] = None
     retrieval_status: RetrievalStatus
     temporal_verdict: TemporalVerdict
-    ranking_method: str = "bm25"
+    ranking_method: str = "temporal_filter_then_hybrid"
     hits: list[RetrievalHit] = Field(default_factory=list)
-

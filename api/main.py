@@ -39,8 +39,8 @@ FRONTEND_DIR = PROJECT_ROOT / "frontend"
 app = FastAPI(
     title="F-1 Verified Explanation Prototype",
     description=(
-        "Local, upload-only prototype for temporal grounding and meaning-preservation "
-        "verification of F-1 employment guidance."
+        "Local, upload-only prototype for automatic claim-level temporal grounding "
+        "and meaning-preservation verification of F-1 employment guidance."
     ),
 )
 app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
@@ -72,6 +72,9 @@ def health():
         "status": "ok",
         "network_ingestion_enabled": config.NETWORK_INGESTION_ENABLED,
         "supported_upload_types": sorted(config.SUPPORTED_UPLOAD_SUFFIXES),
+        "temporal_index_ready": config.RETRIEVAL_INDEX_PATH.exists(),
+        "temporal_model": config.OLLAMA_TEMPORAL_MODEL,
+        "embedding_model": config.OLLAMA_EMBEDDING_MODEL,
     }
 
 @app.post("/documents/upload", response_model=IngestionResult)

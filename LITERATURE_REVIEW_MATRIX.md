@@ -1,81 +1,119 @@
-# Literature Review Matrix: Applicability-Preserving Legal Simplification
+# Literature Review Matrix: Automatic Temporal Claim Retrieval and Safe Legal Simplification
 
-## Project focus
+## Revised project focus
 
-Given a user question about an evolving F-1 rule, retrieve the legally applicable version for the relevant date, produce a plain-language explanation, and verify that the explanation preserves legally important meaning. The target failure is a response that appears faithful and well supported but is grounded in an inapplicable version of the rule.
+Given locally uploaded F-1 employment material, automatically decompose mixed
+passages into atomic legal claims, infer the temporal scope and rhetorical role
+of each claim before retrieval, retrieve claims applicable to a user-selected
+date, and verify that a plain-language explanation preserves legally important
+meaning.
 
-This matrix compares closely related legal-NLP and text-simplification research available through 13 October 2026. A blank or **No** entry means the capability is outside the paper's primary evaluated contribution; it does not imply that the subject is never mentioned.
+The revised target failure is more precise than document-version error. A
+document can be applicable while an individual sentence inside it reports an
+old rule, rejected alternative, proposal, example, or public comment. The unit
+of temporal indexing is therefore the **claim**, not the document.
 
-Legend: **Yes** = directly implemented or evaluated; **Partial** = adjacent or indirect treatment; **No** = outside the reported task.
+This review was updated on 15 October 2026. A blank or **No** means that the
+capability is outside a paper's primary evaluated contribution, not that it is
+never mentioned.
 
 ## Literature matrix
 
-| Study | Main contribution / domain | Date-aware retrieval | Plain-language simplification | Meaning/factuality verification | Evaluates faithful output from an inapplicable source | Limitation relative to our project |
+| Study | Main task/domain | Automatic temporal extraction | Claim/passage-level temporal representation | Time-aware retrieval | Meaning-preservation verification | Gap relative to this project |
 |---|---|:---:|:---:|:---:|:---:|---|
-| [Garimella et al. (2022), *Text Simplification for Legal Domain: Insights and Challenges*](https://aclanthology.org/2022.nllp-1.28/) | Studies legal simplification datasets, methods, metrics, and challenges; includes human evaluation. | No | Yes | Partial | No | Assumes a supplied source and does not select among historical versions. |
-| [Agrawal & Carpuat (2024), *Do Text Simplification Systems Preserve Meaning?*](https://aclanthology.org/2024.tacl-1.24/) | Evaluates meaning preservation through reading-comprehension questions in general-domain simplification. | No | Yes | Yes | No | Does not address legal-domain version applicability. |
-| [Trautmann et al. (2024), *Measuring the Groundedness of Legal Question-Answering Systems*](https://aclanthology.org/2024.nllp-1.14/) | Benchmarks similarity, NLI, and LLM methods for detecting whether legal QA responses are grounded in provided context. | No | No | Yes | No | Tests faithfulness to the supplied context, but not whether that context is the applicable version. |
-| [Hu et al. (2025), *Fine-tuning Large Language Models for Improving Factuality in Legal Question Answering*](https://aclanthology.org/2025.coling-main.298/) | Introduces LegalHalBench and metrics for statute and claim hallucinations; proposes fine-tuning to reduce them. | No | No | Yes | No | Addresses fabricated or false claims, not temporal source selection or simplification loss. |
-| [Beauchemin et al. (2025), *JUDGEBERT*](https://aclanthology.org/2025.emnlp-main.5/) | Introduces FrJUDGE and a metric for legal meaning preservation between French legal sentences. | No | Partial | Yes | No | Compares texts without testing whether the source applies at the queried time. |
-| [Rabbani et al. (2026), *Decode the Law / SIMPLE-LAW*](https://aclanthology.org/2026.lrec-1.45/) | Provides 6,000+ original-simplified legal passage pairs and evaluates LLM simplification using readability, semantic, and hallucination metrics. | No | Yes | Yes | No | Evaluates rewriting of a given passage, but not retrieval from evolving versions. |
-| [Cymbler et al. (2026), *Temporal Misgrounding in Legal RAG*](https://arxiv.org/abs/2608.09393) | Introduces FiscalQA Pro and version-aware retrieval for French tax law; shows static RAG can cite real but inapplicable law. | Yes | No | Partial | No | Verifies date-applicable retrieval and answer facts, but not meaning loss introduced by plain-language simplification. |
-| [Nam et al. (2026), *TimelyRAG*](https://arxiv.org/abs/2609.11572) | Adds temporal distance to ranking for overlapping, evolving laws, policies, and regulations; introduces TimelyQABench. | Yes | No | No | No | Improves version-appropriate retrieval without simplifying legal text or checking preservation of operative details. |
-| [Zheng et al. (2026), *Pub-LawBench*](https://aclanthology.org/2026.acl-long.1680/) | Evaluates public-facing legal QA and generation for legal normativity, relevance, and format usability. | No | Partial | Partial | No | Motivates accessible public-facing answers, but excludes RAG and does not isolate the interaction studied here. |
-| **Proposed project: Applicability-Preserving Simplification for Evolving F-1 Regulations** | Version-aware F-1 retrieval, plain-language generation, structured meaning checks, and selective clarification or abstention. | **Yes** | **Yes** | **Yes** | **Yes** | Tests the unstudied intersection and introduces a controlled benchmark and safety-oriented metric. |
+| [Mathur et al. (2021), *TIMERS: Document-level Temporal Relation Extraction*](https://aclanthology.org/2021.acl-short.67/) | Predicts temporal relations using discourse, syntax, and semantic-role information. | Yes | Partial | No | No | Extracts event relations but does not decide which regulatory claim is operative for a user's date. |
+| [Mathur et al. (2022), *DocTime: A Document-level Temporal Dependency Graph Parser*](https://aclanthology.org/2022.naacl-main.73/) | Creates temporal dependency graphs, including evaluation on contractual documents. | Yes | Partial | No | No | Represents event chronology rather than pre-retrieval legal applicability or simplification safety. |
+| [Garimella et al. (2022), *Text Simplification for Legal Domain*](https://aclanthology.org/2022.nllp-1.28/) | Studies legal simplification data, methods, metrics, and human evaluation. | No | No | No | Partial | Assumes the supplied source is the correct legal source. |
+| [Agrawal & Carpuat (2024), *Do Text Simplification Systems Preserve Meaning?*](https://aclanthology.org/2024.tacl-1.24/) | Evaluates meaning preservation through reading-comprehension questions. | No | No | No | Yes | Does not address evolving legal claims or source applicability. |
+| [Trautmann et al. (2024), *Measuring the Groundedness of Legal QA Systems*](https://aclanthology.org/2024.nllp-1.14/) | Evaluates whether a legal answer is grounded in supplied context. | No | No | No | Yes | A response can be grounded in context that reports an inapplicable rule. |
+| [Barale et al. (2025), *LexTime*](https://aclanthology.org/2025.findings-emnlp.280/) | Benchmarks temporal ordering of events in U.S. legal complaints. | Yes | Yes | No | No | Evaluates event ordering, not regulatory effect intervals or retrieval decisions. |
+| [Beauchemin et al. (2025), *JUDGEBERT*](https://aclanthology.org/2025.emnlp-main.5/) | Measures legal meaning preservation between French legal sentences. | No | No | No | Yes | Does not test whether the source claim applies at the requested time. |
+| [Rabbani et al. (2026), *Decode the Law / SIMPLE-LAW*](https://aclanthology.org/2026.lrec-1.45/) | Provides legal simplification pairs and evaluates readability, semantics, and hallucination. | No | No | No | Yes | Rewrites a given passage without resolving changing rule versions. |
+| [Yousuf et al. (2026), *Utilizing Metadata for Better RAG*](https://arxiv.org/abs/2601.11863) | Compares metadata-as-text, unified embeddings, late fusion, and metadata-aware queries. | No | Partial | Yes | No | Shows metadata can improve retrieval but does not automatically infer legal temporal applicability. |
+| [Cymbler et al. (2026), *Temporal Misgrounding in Legal RAG*](https://arxiv.org/abs/2608.09393) | Introduces a versioned French-tax corpus and demonstrates wrong-version retrieval. | No | Partial | Yes | Partial | Uses versioned legal sources; it does not automatically atomize mixed passages or test simplification loss. |
+| [Huang et al. (2026), *When Do LLMs Apply the Wrong Law?*](https://arxiv.org/abs/2608.14610) | Benchmarks LLM temporal applicable-law determination and diagnoses current-law bias. | Partial | Partial | No | No | Demonstrates that LLM temporal reasoning is unreliable, motivating confidence, abstention, and a gold evaluation set. |
+| [Nam et al. (2026), *TimelyRAG*](https://arxiv.org/abs/2609.11572) | Combines semantic and temporal distance for overlapping evolving documents. | Partial | Partial | Yes | No | Improves time-aware ranking but does not jointly verify meaning preservation after simplification. |
+| **This project** | F-1 employment and extension rules | **Yes** | **Yes: atomic regulatory claims** | **Yes: temporal filter before hybrid ranking** | **Yes** | Evaluates the interaction between automatic temporal inference, retrieval, and simplification safety. |
 
-## Synthesis of the research gap
+## Revised architecture relative to prior work
 
-The literature forms two well-developed but mostly separate strands. The first studies **temporal grounding**: Cymbler et al. and Nam et al. show that systems must retrieve the version of a rule applicable to the relevant date. The second studies **accessible yet faithful generation**: Garimella et al., Rabbani et al., Beauchemin et al., and Agrawal and Carpuat examine simplification and meaning preservation. Legal-groundedness and hallucination research further checks whether an answer agrees with the context it was given.
+The system now separates three concepts that ordinary document-level RAG often
+conflates:
 
-This leaves an important blind spot. A simplified answer can be faithful to its retrieved passage and still be legally wrong because the passage was not applicable at the relevant time. Conversely, a system can retrieve the correct version and then omit an exception, reverse a negation, or alter a deadline while simplifying it. The reviewed work does not jointly evaluate these hazards in an end-to-end public-facing legal explanation system.
+| Layer | Question answered | Implementation |
+|---|---|---|
+| Claim atomization | What independent regulatory propositions occur in this passage? | Local instruction model with exact evidence spans |
+| Temporal semantics | Is each proposition operative, historical, transitional, proposed, rejected, commentary, an example, or unclear—and what interval is supported? | Structured model output stored before retrieval |
+| Applicability-constrained retrieval | Which temporally eligible claim best matches the question? | Date filtering followed by dense semantic and BM25 ranking |
+| Meaning verification | Did the explanation retain the selected claim's conditions, exceptions, negation, dates, forms, and quantities? | Existing atomic-fact verifier and release gate |
+
+This design does not treat an embedding as a date-comparison engine. Dates and
+roles are structured fields used for deterministic filtering; embeddings are
+used only to rank semantically relevant claims that survive the filter.
 
 ## Defensible novelty claim
 
-> To the best of our knowledge, prior work evaluates either temporal applicability in legal retrieval or meaning preservation in legal simplification, but not their interaction. We study **applicability-preserving legal simplification**: an explanation is considered safe only when it is grounded in the rule version applicable to the user's date and preserves that rule's legally operative content. We operationalize this interaction with controlled error types and a **false-safe rate** measuring how often a system accepts an explanation that is fluent and source-faithful yet legally unsafe because of wrong-version grounding or meaning loss.
+> Prior research separately studies temporal relation extraction, metadata-aware
+> or version-aware retrieval, and legal meaning preservation. We investigate a
+> narrower interaction: whether automatically converting mixed-temporal F-1
+> regulatory passages into temporally scoped atomic claims **before retrieval**,
+> then verifying meaning after retrieval, reduces false-safe plain-language
+> explanations. We evaluate cases where a document is valid but an individual
+> claim is historical, proposed, rejected, or otherwise non-operative.
 
-Use **“to the best of our knowledge”**, rather than “the first ever,” unless a broader systematic review confirms absolute priority.
+This is a **system, benchmark, and evaluation contribution**, not a claim that
+temporal extraction, embeddings, RAG, or legal simplification was independently
+invented here. Use “to the best of our knowledge” and avoid “the first ever.”
 
-## What makes this more than a standard combination
+## Novel failure cases enabled by the revised design
 
-The contribution should not be described merely as “temporal RAG plus simplification.” It should be framed as a new evaluation problem with an interaction-specific failure class:
+1. A current document accurately describes a superseded requirement.
+2. One passage contains both an old and a new rule.
+3. A public comment proposes the same number or deadline used in the question.
+4. A final rule explains an alternative that the agency rejected.
+5. A transition provision applies only during a bounded window.
+6. The model assigns a confident but unsupported temporal interval.
+7. Temporal inference is correct but semantic retrieval selects the wrong topic.
+8. Retrieval is correct but simplification removes a condition or exception.
 
-1. **New failure class:** faithful-to-the-wrong-version explanations.
-2. **New benchmark design:** each legal fact is paired with controlled variants—correct and faithful, wrong version but faithful, omitted condition, omitted exception, reversed negation, and changed number or deadline.
-3. **New decision objective:** accept, request a missing date, revise, or abstain—not simply generate an answer.
-4. **New primary metric:** **false-safe rate**, the proportion of unsafe explanations incorrectly approved by the verifier.
-5. **Interaction test:** compare standard RAG, temporal-only, meaning-only, and combined systems. The combined model must reduce false-safe errors beyond either single component.
+## Evaluation needed to support the contribution
 
-## Evidence required in the final report
+| Research question | Metric |
+|---|---|
+| Does the model split mixed passages into the correct atomic claims? | Claim boundary precision/recall and exact-evidence validity |
+| Does it recognize operative versus non-operative language? | Macro-F1 over temporal-role labels |
+| Are inferred temporal scopes correct? | Start-date accuracy, end-date accuracy, interval overlap, and unsupported-date rate |
+| Does filter-first retrieval find the applicable claim? | Applicable-claim Recall@K, MRR, and wrong-period retrieval rate |
+| Does uncertainty handling improve safety? | Risk-coverage curve and abstention rate |
+| Does the full system prevent unsafe release? | False-safe rate by error category |
 
-The matrix supports a **novelty hypothesis**. The following experiments would provide empirical evidence:
+The gold set should be small and carefully audited. Removing manual metadata from
+the runtime pipeline does not remove the need for independent human labels in
+the experiment; without them, automatic temporal extraction cannot be evaluated.
 
-| Research question | Comparison | Expected evidence |
-|---|---|---|
-| Does temporal grounding matter? | Standard RAG vs. temporal-only retrieval | Better applicable-version retrieval and fewer wrong-version answers. |
-| Does meaning verification matter? | Unverified simplification vs. meaning-only verifier | Better detection of omitted conditions and exceptions, negation reversals, and altered dates or quantities. |
-| Is the joint formulation necessary? | Temporal-only and meaning-only vs. combined system | The combined system achieves the lowest false-safe rate across both error families. |
-| Does clarification help when time is underspecified? | Forced answering vs. date clarification or abstention | Lower false-safe rate at an explicitly reported coverage level. |
-| Are results robust beyond memorized wording? | Random split vs. split by legal provision | Performance remains meaningful when test provisions are unseen during development. |
+## Required ablations
 
-## Recommended proposal positioning
+1. BM25 without temporal information
+2. Original document-level date filtering
+3. Automatic claim-level temporal filtering with BM25
+4. Automatic claim-level filtering with hybrid semantic retrieval
+5. Full system with meaning-preservation verification
 
-Do not claim that assembling known components is itself novel. Claim that the project:
-
-- identifies and formalizes a previously under-evaluated interaction between **source applicability** and **output fidelity**;
-- creates a small, auditable benchmark for that interaction in a narrowly scoped F-1 setting;
-- introduces a safety-focused evaluation protocol and false-safe metric; and
-- tests through ablations whether solving both gates is necessary.
-
-The novelty therefore lies in the problem formulation, benchmark, failure taxonomy, and evaluation—not in presenting standard RAG or NLI components as new algorithms.
+The main empirical novelty claim is supported only if claim-level filtering
+reduces subtle wrong-period retrieval and the full system further reduces
+false-safe explanations.
 
 ## Core references
 
-1. Garimella, A., et al. (2022). “Text Simplification for Legal Domain: Insights and Challenges.” *NLLP 2022*. https://doi.org/10.18653/v1/2022.nllp-1.28
-2. Agrawal, S., & Carpuat, M. (2024). “Do Text Simplification Systems Preserve Meaning? A Human Evaluation via Reading Comprehension.” *TACL, 12*, 432–448. https://doi.org/10.1162/tacl_a_00653
-3. Trautmann, D., et al. (2024). “Measuring the Groundedness of Legal Question-Answering Systems.” *NLLP 2024*. https://aclanthology.org/2024.nllp-1.14/
-4. Hu, Y., et al. (2025). “Fine-tuning Large Language Models for Improving Factuality in Legal Question Answering.” *COLING 2025*. https://aclanthology.org/2025.coling-main.298/
-5. Beauchemin, D., et al. (2025). “JUDGEBERT: Assessing Legal Meaning Preservation Between Sentences.” *EMNLP 2025*. https://doi.org/10.18653/v1/2025.emnlp-main.5
-6. Rabbani, M. D., et al. (2026). “Decode the Law: Towards Legal Text Simplification with Large Language Models.” *LREC 2026*. https://doi.org/10.63317/2i7en3xycmhi
-7. Cymbler, R., Guez, D., & Fabre, L. (2026). “Temporal Misgrounding in Legal RAG: A Versioned-Corpus Benchmark for French Tax Law.” *ICML 2026 AI4Law Workshop*. https://arxiv.org/abs/2608.09393
-8. Nam, Y., et al. (2026). “TimelyRAG: Semantic-Temporal Hybrid Retrieval for Time-Critical Question Answering in Overlapping-Evolving Documents.” https://arxiv.org/abs/2609.11572
-9. Zheng, Q., et al. (2026). “Pub-LawBench: Public-Oriented Benchmarking for LegalAI.” *ACL 2026*. https://aclanthology.org/2026.acl-long.1680/
+1. Mathur, P., et al. (2021). “TIMERS: Document-level Temporal Relation Extraction.” ACL-IJCNLP. https://doi.org/10.18653/v1/2021.acl-short.67
+2. Mathur, P., et al. (2022). “DocTime: A Document-level Temporal Dependency Graph Parser.” NAACL. https://doi.org/10.18653/v1/2022.naacl-main.73
+3. Garimella, A., et al. (2022). “Text Simplification for Legal Domain: Insights and Challenges.” NLLP. https://doi.org/10.18653/v1/2022.nllp-1.28
+4. Agrawal, S., & Carpuat, M. (2024). “Do Text Simplification Systems Preserve Meaning?” TACL. https://doi.org/10.1162/tacl_a_00653
+5. Trautmann, D., et al. (2024). “Measuring the Groundedness of Legal Question-Answering Systems.” NLLP. https://aclanthology.org/2024.nllp-1.14/
+6. Barale, C., et al. (2025). “LexTime: A Benchmark for Temporal Ordering of Legal Events.” Findings of EMNLP. https://doi.org/10.18653/v1/2025.findings-emnlp.280
+7. Beauchemin, D., et al. (2025). “JUDGEBERT.” EMNLP. https://doi.org/10.18653/v1/2025.emnlp-main.5
+8. Rabbani, M. D., et al. (2026). “Decode the Law.” LREC. https://doi.org/10.63317/2i7en3xycmhi
+9. Yousuf, R. B., et al. (2026). “Utilizing Metadata for Better Retrieval-Augmented Generation.” https://arxiv.org/abs/2601.11863
+10. Cymbler, R., Guez, D., & Fabre, L. (2026). “Temporal Misgrounding in Legal RAG.” https://arxiv.org/abs/2608.09393
+11. Huang, Y., et al. (2026). “When Do LLMs Apply the Wrong Law?” https://arxiv.org/abs/2608.14610
+12. Nam, Y., et al. (2026). “TimelyRAG.” https://arxiv.org/abs/2609.11572
