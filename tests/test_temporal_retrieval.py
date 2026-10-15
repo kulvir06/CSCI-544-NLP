@@ -15,9 +15,11 @@ from corpus.schema import (
     DocumentStatus,
     MetadataCorrections,
     ReviewDecision,
+    SourceTier,
 )
 from retrieval.index import build_index, load_index
 from retrieval.schema import (
+    IndexedPassage,
     PassageTemporalStatus,
     RetrievalRequest,
     RetrievalStatus,
@@ -200,6 +202,85 @@ class TemporalRetrievalTests(unittest.TestCase):
             response.retrieval_status,
             RetrievalStatus.NO_RELEVANT_PASSAGES,
         )
+
+    def test_historical_duration_query_prefers_applicable_rule_version(self):
+        passages = [
+            IndexedPassage(
+                passage_id="old-rule-p1",
+                document_id="old-rule",
+                text=(
+                    "A qualified F-1 student may obtain a 17-month STEM OPT "
+                    "extension under the applicable requirements."
+                ),
+                passage_relevance_score=5.0,
+                source_tier=SourceTier.PRIMARY_LAW,
+                corpus_use=CorpusUse.TEMPORAL_AND_MEANING,
+                effective_from=date(2008, 4, 8),
+                effective_to=date(2016, 5, 9),
+                date_evidence="Historical effective interval.",
+                document_status=DocumentStatus.SUPERSEDED,
+            ),
+            IndexedPassage(
+                passage_id="new-rule-comment-p1",
+                document_id="new-rule",
+                text=(
+                    "Some commenters recommended a longer STEM OPT extension, "
+                    "most commonly 36 months."
+                ),
+                passage_relevance_score=8.0,
+                source_tier=SourceTier.PRIMARY_LAW,
+                corpus_use=CorpusUse.TEMPORAL_AND_MEANING,
+                effective_from=date(2016, 5, 10),
+                date_evidence="New rule effective date.",
+                document_status=DocumentStatus.HISTORICAL,
+            ),
+            IndexedPassage(
+                passage_id="new-rule-p1",
+                document_id="new-rule",
+                text="The final rule sets the duration of the STEM OPT extension at 24 months.",
+                passage_relevance_score=6.0,
+                source_tier=SourceTier.PRIMARY_LAW,
+                corpus_use=CorpusUse.TEMPORAL_AND_MEANING,
+                effective_from=date(2016, 5, 10),
+                date_evidence="New rule effective date.",
+                document_status=DocumentStatus.HISTORICAL,
+            ),
+            IndexedPassage(
+                passage_id="guidance-p1",
+                document_id="guidance",
+                text="Current STEM OPT extension guidance discusses how long employment may continue.",
+                passage_relevance_score=9.0,
+                source_tier=SourceTier.FEDERAL_GUIDANCE,
+                corpus_use=CorpusUse.MEANING_ONLY,
+                document_status=DocumentStatus.CURRENT,
+            ),
+        ]
+        config.RETRIEVAL_INDEX_PATH.write_text(
+            "\n".join(passage.model_dump_json() for passage in passages) + "\n",
+            encoding="utf-8",
+        )
+
+        old_response = retrieve(
+            RetrievalRequest(
+                query="How long is the STEM OPT extension?",
+                relevant_date=date(2010, 6, 1),
+                top_k=1,
+            )
+        )
+        new_response = retrieve(
+            RetrievalRequest(
+                query="How long is the STEM OPT extension?",
+                relevant_date=date(2020, 6, 1),
+                top_k=1,
+            )
+        )
+
+        self.assertEqual(old_response.temporal_verdict, TemporalVerdict.VERIFIED_APPLICABLE)
+        self.assertEqual(old_response.hits[0].passage.document_id, "old-rule")
+        self.assertIn("17-month", old_response.hits[0].passage.text)
+        self.assertEqual(new_response.temporal_verdict, TemporalVerdict.VERIFIED_APPLICABLE)
+        self.assertEqual(new_response.hits[0].passage.passage_id, "new-rule-p1")
+        self.assertIn("24 months", new_response.hits[0].passage.text)
 
 
 if __name__ == "__main__":

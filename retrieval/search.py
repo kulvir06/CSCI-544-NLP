@@ -21,6 +21,12 @@ from retrieval.schema import (
 
 
 TOKEN_PATTERN = re.compile(r"[A-Za-z0-9]+(?:-[A-Za-z0-9]+)?")
+DURATION_QUERY_PATTERN = re.compile(r"\b(how long|duration|length)\b", re.I)
+NON_OPERATIVE_DISCUSSION_PATTERN = re.compile(
+    r"\b(commenters?|recommended|recommendation|alternative considered)\b|"
+    r"^(?:comment|response)\.",
+    re.I,
+)
 STOPWORDS = {
     "a", "an", "and", "are", "as", "at", "be", "by", "can", "do", "for",
     "from", "how", "i", "in", "is", "it", "may", "my", "of", "on", "or",
@@ -36,10 +42,27 @@ def _tokens(text: str) -> list[str]:
     ]
 
 
+def _query_tokens(query: str) -> list[str]:
+    tokens = _tokens(query)
+    if DURATION_QUERY_PATTERN.search(query):
+        # Regulations normally state durations as numbered time units rather
+        # than repeating a user's phrase such as "how long".
+        tokens.extend(["month", "months", "day", "days", "year", "years"])
+    return tokens
+
+
+def _has_substantive_query_overlap(query: str, passage_text: str) -> bool:
+    """Reject dated candidates that share only one generic query term."""
+    query_terms = set(_tokens(query))
+    passage_terms = set(_tokens(passage_text))
+    required_matches = 1 if len(query_terms) <= 1 else 2
+    return len(query_terms & passage_terms) >= required_matches
+
+
 def _bm25_scores(query: str, passages: list[IndexedPassage]) -> list[float]:
     if not passages:
         return []
-    query_terms = set(_tokens(query))
+    query_terms = set(_query_tokens(query))
     if not query_terms:
         return [0.0] * len(passages)
 
@@ -73,6 +96,14 @@ def _bm25_scores(query: str, passages: list[IndexedPassage]) -> list[float]:
 
         # Preserve the ingestion signal only as a small tie-breaker.
         if score > 0:
+            # Preambles contain proposed alternatives and public comments that
+            # mention attractive query terms but do not state the operative
+            # rule. Apply this conservative penalty only for duration questions.
+            if (
+                DURATION_QUERY_PATTERN.search(query)
+                and NON_OPERATIVE_DISCUSSION_PATTERN.search(passage.text)
+            ):
+                score *= 0.6
             score += min(passage.passage_relevance_score, 10.0) * 0.001
         scores.append(score)
     return scores
@@ -109,12 +140,6 @@ def retrieve(request: RetrievalRequest) -> RetrievalResponse:
         key=lambda item: (-item[1], item[0].passage_id),
     )
 
-    # Temporal evidence should come from passages that are genuinely competitive
-    # for the query, not every passage sharing a generic word such as "extension".
-    if ranked:
-        relevance_floor = ranked[0][1] * 0.5
-        ranked = [item for item in ranked[:50] if item[1] >= relevance_floor]
-
     if not ranked:
         temporal_verdict = (
             TemporalVerdict.INSUFFICIENT_TEMPORAL_EVIDENCE
@@ -129,6 +154,10 @@ def retrieve(request: RetrievalRequest) -> RetrievalResponse:
         )
 
     if not request.relevant_date:
+        # For undated questions, keep a tight lexical cohort so passages sharing
+        # only a generic word do not appear as evidence.
+        relevance_floor = ranked[0][1] * 0.5
+        ranked = [item for item in ranked[:50] if item[1] >= relevance_floor]
         hits = [
             RetrievalHit(
                 passage=passage,
@@ -144,14 +173,27 @@ def retrieve(request: RetrievalRequest) -> RetrievalResponse:
             hits=hits,
         )
 
+    # A dated question must not discard an applicable historical version merely
+    # because a newer or undated passage has the highest raw lexical score.
+    # Require direct overlap with multiple substantive query terms rather than
+    # comparing old and new documents through a brittle global score ratio.
+    temporal_candidates = [
+        item
+        for item in ranked[:100]
+        if _has_substantive_query_overlap(request.query, item[0].text)
+    ]
     classified = [
         (passage, score, _temporal_status(passage, request.relevant_date))
-        for passage, score in ranked
+        for passage, score in temporal_candidates
     ]
     applicable = [item for item in classified if item[2] == PassageTemporalStatus.APPLICABLE]
+    # Undated evidence remains a fallback, but only from the tighter relevance
+    # cohort used by ordinary retrieval.
+    fallback_floor = ranked[0][1] * 0.5
     insufficient = [
         item for item in classified
         if item[2] == PassageTemporalStatus.INSUFFICIENT_EVIDENCE
+        and item[1] >= fallback_floor
     ]
 
     if applicable:
