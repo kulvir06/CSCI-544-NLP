@@ -25,6 +25,13 @@ from temporal.schema import TemporalClaim, TemporalRole
 
 TOKEN_PATTERN = re.compile(r"[A-Za-z0-9]+(?:-[A-Za-z0-9]+)?")
 DURATION_QUERY_PATTERN = re.compile(r"\b(how long|duration|length)\b", re.I)
+DIRECT_DURATION_CLAIM_PATTERN = re.compile(
+    r"\b(?:final|interim) rule sets? the duration\b.{0,120}\b\d+\s*[- ]?months?\b|"
+    r"\b\d+\s*[- ]month\s+STEM OPT extension\b|"
+    r"\bSTEM OPT extension (?:will be|is|lasts|lasted|of)\b.{0,80}\b\d+\s*[- ]?months?\b|"
+    r"\bextends? the maximum period of OPT from\b.{0,100}\b\d+\s*[- ]?months?\b",
+    re.I,
+)
 STOPWORDS = {
     "a", "an", "and", "are", "as", "at", "be", "by", "can", "do", "for",
     "from", "how", "i", "in", "is", "it", "may", "my", "of", "on", "or",
@@ -91,6 +98,11 @@ def _bm25_scores(query: str, claims: list[TemporalClaim]) -> list[float]:
             )
             score += inverse_document_frequency * frequency * 2.5 / denominator
         if score > 0:
+            if (
+                DURATION_QUERY_PATTERN.search(query)
+                and DIRECT_DURATION_CLAIM_PATTERN.search(claim.text)
+            ):
+                score += 5.0
             score += min(claim.passage_relevance_score, 10.0) * 0.001
         scores.append(score)
     return scores
@@ -235,32 +247,11 @@ def retrieve(request: RetrievalRequest) -> RetrievalResponse:
             claim.claim_id: _temporal_status(claim, request.relevant_date)
             for claim in claims
         }
-        applicable = [
-            claim for claim in claims
-            if statuses[claim.claim_id] == PassageTemporalStatus.APPLICABLE
-        ]
-        uncertain = [
-            claim for claim in claims
-            if statuses[claim.claim_id] == PassageTemporalStatus.INSUFFICIENT_EVIDENCE
-        ]
-        inapplicable = [
-            claim for claim in claims
-            if statuses[claim.claim_id] == PassageTemporalStatus.NOT_APPLICABLE
-        ]
-        if applicable:
-            candidate_claims = applicable
-            verdict = TemporalVerdict.VERIFIED_APPLICABLE
-        elif uncertain:
-            candidate_claims = uncertain
-            verdict = TemporalVerdict.INSUFFICIENT_TEMPORAL_EVIDENCE
-        else:
-            candidate_claims = inapplicable
-            verdict = TemporalVerdict.VERIFIED_NOT_APPLICABLE
+        candidate_claims = claims
     else:
         candidate_claims = [
             claim for claim in claims if claim.temporal_role not in NON_NORMATIVE_ROLES
         ]
-        verdict = TemporalVerdict.NOT_REQUESTED
         statuses = {
             claim.claim_id: PassageTemporalStatus.NOT_REQUESTED
             for claim in candidate_claims
@@ -283,7 +274,34 @@ def retrieve(request: RetrievalRequest) -> RetrievalResponse:
             ranking_method=ranking_method,
         )
 
-    selected = ranked[:request.top_k]
+    if request.relevant_date:
+        # Date filtering must not promote a weakly related applicable claim over
+        # the strongest semantic match. Define the relevant score cohort first;
+        # then prefer applicable claims only inside that cohort. This makes a
+        # highly relevant but temporally unknown claim cause abstention.
+        relevance_floor = ranked[0][1] * config.TEMPORAL_RELEVANCE_RATIO
+        relevant_ranked = [item for item in ranked if item[1] >= relevance_floor]
+        applicable_ranked = [
+            item for item in relevant_ranked
+            if statuses[item[0].claim_id] == PassageTemporalStatus.APPLICABLE
+        ]
+        if applicable_ranked:
+            selected = applicable_ranked[:request.top_k]
+            verdict = TemporalVerdict.VERIFIED_APPLICABLE
+        else:
+            best_status = statuses[relevant_ranked[0][0].claim_id]
+            selected = [
+                item for item in relevant_ranked
+                if statuses[item[0].claim_id] == best_status
+            ][:request.top_k]
+            verdict = (
+                TemporalVerdict.INSUFFICIENT_TEMPORAL_EVIDENCE
+                if best_status == PassageTemporalStatus.INSUFFICIENT_EVIDENCE
+                else TemporalVerdict.VERIFIED_NOT_APPLICABLE
+            )
+    else:
+        selected = ranked[:request.top_k]
+        verdict = TemporalVerdict.NOT_REQUESTED
     return RetrievalResponse(
         query=request.query,
         relevant_date=request.relevant_date,

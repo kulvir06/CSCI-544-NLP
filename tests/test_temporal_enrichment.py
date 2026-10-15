@@ -7,11 +7,16 @@ from unittest.mock import patch
 
 from api import config
 from corpus.pipeline import ingest_upload
-from corpus.schema import DocumentMetadata
+from corpus.schema import DocumentMetadata, DocumentStatus, SourceTier
 from retrieval.schema import RetrievalRequest, TemporalVerdict
 from retrieval.search import retrieve
 from temporal.enrichment import build_temporal_index, load_temporal_claims
-from temporal.schema import ClaimExtraction, ExtractedClaim, TemporalRole
+from temporal.schema import (
+    ClaimExtraction,
+    ExtractedClaim,
+    TemporalClaim,
+    TemporalRole,
+)
 
 
 class FakeTemporalModel:
@@ -121,6 +126,61 @@ class TemporalEnrichmentTests(unittest.TestCase):
         self.assertIn("17 months", old.hits[0].passage.text)
         self.assertEqual(current.temporal_verdict, TemporalVerdict.VERIFIED_APPLICABLE)
         self.assertIn("24 months", current.hits[0].passage.text)
+
+    def test_weak_applicable_claim_cannot_displace_direct_unknown_claim(self):
+        direct_unknown = TemporalClaim(
+            claim_id="duration-unknown",
+            document_id="doc",
+            source_passage_id="p1",
+            text="The STEM OPT extension lasts 17 months.",
+            evidence_quote="The STEM OPT extension lasts 17 months.",
+            context="The STEM OPT extension lasts 17 months.",
+            passage_relevance_score=5.0,
+            source_tier=SourceTier.PRIMARY_LAW,
+            document_status=DocumentStatus.HISTORICAL,
+            temporal_role=TemporalRole.OPERATIVE,
+            date_basis="No supported interval in this excerpt.",
+            temporal_confidence=0.9,
+            extraction_model="fake",
+            embedding_model="none",
+        )
+        weak_applicable = TemporalClaim(
+            claim_id="reporting-applicable",
+            document_id="doc",
+            source_passage_id="p2",
+            text="An employer must report a STEM OPT extension change within 48 hours.",
+            evidence_quote="An employer must report a STEM OPT extension change within 48 hours.",
+            context="An employer must report a STEM OPT extension change within 48 hours.",
+            passage_relevance_score=5.0,
+            source_tier=SourceTier.PRIMARY_LAW,
+            document_status=DocumentStatus.HISTORICAL,
+            temporal_role=TemporalRole.OPERATIVE,
+            valid_from=date(2008, 4, 8),
+            valid_to=date(2016, 5, 9),
+            date_basis="Explicit effective interval.",
+            temporal_confidence=0.9,
+            extraction_model="fake",
+            embedding_model="none",
+        )
+        self.index_path = config.RETRIEVAL_INDEX_PATH
+        self.index_path.parent.mkdir(parents=True, exist_ok=True)
+        self.index_path.write_text(
+            direct_unknown.model_dump_json() + "\n" + weak_applicable.model_dump_json() + "\n",
+            encoding="utf-8",
+        )
+
+        response = retrieve(
+            RetrievalRequest(
+                query="How long is the STEM OPT extension?",
+                relevant_date=date(2010, 6, 1),
+            )
+        )
+
+        self.assertEqual(
+            response.temporal_verdict,
+            TemporalVerdict.INSUFFICIENT_TEMPORAL_EVIDENCE,
+        )
+        self.assertEqual(response.hits[0].passage.passage_id, "duration-unknown")
 
 
 if __name__ == "__main__":
