@@ -20,8 +20,8 @@ effective dates. It uses a dual-index pipeline:
 5. Each claim receives an inferred role (`operative`, `historical`,
    `transitional`, `proposed`, `rejected`, `public_comment`, `example`, or
    `unknown`), an evidence quote, a supported date interval, and confidence.
-6. Retrieval searches every passage, expands context through sequence links,
-   and consults linked temporal claims for dated questions.
+6. Retrieval searches every passage, returns sequence links for neighboring
+   context traversal, and consults linked temporal claims for dated questions.
 7. The selected evidence is passed to the existing meaning-preservation and safety
    gates.
 
