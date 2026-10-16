@@ -22,11 +22,13 @@ class OllamaClient:
         temporal_model: str = config.OLLAMA_TEMPORAL_MODEL,
         embedding_model: str = config.OLLAMA_EMBEDDING_MODEL,
         timeout: float = config.OLLAMA_TIMEOUT_SECONDS,
+        num_predict: int = config.OLLAMA_PRIMARY_NUM_PREDICT,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.temporal_model = temporal_model
         self.embedding_model = embedding_model
         self.timeout = timeout
+        self.num_predict = num_predict
 
     def _post(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
         request = Request(
@@ -55,7 +57,7 @@ class OllamaClient:
                 "model": self.temporal_model,
                 "stream": False,
                 "format": ClaimExtraction.model_json_schema(),
-                "options": {"temperature": 0, "num_predict": 1200},
+                "options": {"temperature": 0, "num_predict": self.num_predict},
                 "messages": [
                     {
                         "role": "system",

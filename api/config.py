@@ -32,9 +32,17 @@ NETWORK_INGESTION_ENABLED = False
 # Ollama is used only on local, already-uploaded text. Nothing in the corpus
 # pipeline downloads source documents. Models must be installed separately.
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip("/")
-OLLAMA_TEMPORAL_MODEL = os.getenv("OLLAMA_TEMPORAL_MODEL", "llama3.1:8b")
+OLLAMA_TEMPORAL_MODEL = os.getenv("OLLAMA_TEMPORAL_MODEL", "qwen2.5:3b")
+OLLAMA_FALLBACK_TEMPORAL_MODEL = os.getenv(
+    "OLLAMA_FALLBACK_TEMPORAL_MODEL", "llama3.1:8b"
+)
 OLLAMA_EMBEDDING_MODEL = os.getenv("OLLAMA_EMBEDDING_MODEL", "nomic-embed-text")
 OLLAMA_TIMEOUT_SECONDS = float(os.getenv("OLLAMA_TIMEOUT_SECONDS", "300"))
+OLLAMA_PRIMARY_NUM_PREDICT = int(os.getenv("OLLAMA_PRIMARY_NUM_PREDICT", "600"))
+OLLAMA_FALLBACK_NUM_PREDICT = int(os.getenv("OLLAMA_FALLBACK_NUM_PREDICT", "900"))
+OLLAMA_FALLBACK_CONFIDENCE_THRESHOLD = float(
+    os.getenv("OLLAMA_FALLBACK_CONFIDENCE_THRESHOLD", "0.70")
+)
 TEMPORAL_CONFIDENCE_THRESHOLD = float(
     os.getenv("TEMPORAL_CONFIDENCE_THRESHOLD", "0.65")
 )

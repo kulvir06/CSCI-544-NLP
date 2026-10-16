@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 import re
 import time
-from typing import Callable, Protocol
+from typing import Callable, Optional, Protocol
 
 from api import config
 from corpus.schema import Passage, StoredDocument
@@ -79,7 +79,10 @@ def _context(passages: list[Passage], index: int) -> str:
     parts: list[str] = []
     for neighbor_index in range(max(0, index - 1), min(len(passages), index + 2)):
         label = "SOURCE PASSAGE" if neighbor_index == index else "SURROUNDING CONTEXT"
-        parts.append(f"[{label}]\n{passages[neighbor_index].text}")
+        text = passages[neighbor_index].text
+        if neighbor_index != index and len(text) > 800:
+            text = f"{text[:400]}\n...[neighbor excerpt shortened]...\n{text[-400:]}"
+        parts.append(f"[{label}]\n{text}")
     return "\n\n".join(parts)
 
 
@@ -120,7 +123,7 @@ def _cache_path(passage: Passage, model_name: str) -> Path:
     return config.TEMPORAL_CACHE_DIR / f"{passage.passage_id}-{digest}.json"
 
 
-def _extract_with_cache(
+def _extract_one_model(
     model: TemporalModel,
     document: StoredDocument,
     passage: Passage,
@@ -135,6 +138,108 @@ def _extract_with_cache(
     extraction = model.extract_claims(_prompt(document, passage, context))
     path.write_text(extraction.model_dump_json(indent=2), encoding="utf-8")
     return extraction, False
+
+
+def _needs_fallback(extraction: ClaimExtraction, passage: Passage) -> bool:
+    valid_claims = [
+        claim for claim in extraction.claims if _valid_claim(claim, passage)
+    ]
+    if not valid_claims:
+        return True
+    for claim in valid_claims:
+        if claim.temporal_role == TemporalRole.UNKNOWN:
+            return True
+        if claim.confidence < config.OLLAMA_FALLBACK_CONFIDENCE_THRESHOLD:
+            return True
+        if (
+            claim.temporal_role
+            in {TemporalRole.HISTORICAL, TemporalRole.TRANSITIONAL}
+            and not claim.valid_from
+            and not claim.valid_to
+        ):
+            return True
+    return False
+
+
+def _extract_with_cascade(
+    primary_model: TemporalModel,
+    fallback_model: Optional[TemporalModel],
+    document: StoredDocument,
+    passage: Passage,
+    context: str,
+) -> tuple[ClaimExtraction, bool, str, str]:
+    # Preserve work from runs made before the fast-primary cascade existed.
+    # If the stronger model already completed this passage and the new primary
+    # has not, the cached stronger result is already the best available answer.
+    if fallback_model is not None:
+        primary_path = _cache_path(passage, primary_model.temporal_model)
+        fallback_path = _cache_path(passage, fallback_model.temporal_model)
+        if fallback_path.exists() and not primary_path.exists():
+            try:
+                return (
+                    ClaimExtraction.model_validate_json(
+                        fallback_path.read_text(encoding="utf-8")
+                    ),
+                    True,
+                    fallback_model.temporal_model,
+                    "existing_fallback_cache",
+                )
+            except (OSError, ValueError):
+                # Ignore an unreadable cache entry and regenerate it through
+                # the normal primary/fallback path below.
+                pass
+
+    primary_result: Optional[ClaimExtraction] = None
+    primary_cache_hit = False
+    primary_error: Optional[Exception] = None
+    try:
+        primary_result, primary_cache_hit = _extract_one_model(
+            primary_model, document, passage, context
+        )
+    except Exception as error:
+        primary_error = error
+
+    should_fallback = (
+        fallback_model is not None
+        and (
+            primary_result is None
+            or _needs_fallback(primary_result, passage)
+        )
+    )
+    if should_fallback and fallback_model is not None:
+        try:
+            fallback_result, fallback_cache_hit = _extract_one_model(
+                fallback_model, document, passage, context
+            )
+            return (
+                fallback_result,
+                fallback_cache_hit,
+                fallback_model.temporal_model,
+                "fallback",
+            )
+        except Exception as fallback_error:
+            if primary_result is None:
+                raise RuntimeError(
+                    f"primary model failed ({primary_error}); fallback model "
+                    f"failed ({fallback_error})"
+                ) from fallback_error
+            return (
+                primary_result,
+                primary_cache_hit,
+                primary_model.temporal_model,
+                "primary_after_fallback_failure",
+            )
+
+    if primary_result is None:
+        if primary_error is not None:
+            raise primary_error
+        raise RuntimeError("Primary temporal model produced no result")
+    return (
+        primary_result,
+        primary_cache_hit,
+        primary_model.temporal_model,
+        "primary",
+    )
 
 
 def _valid_claim(claim: ExtractedClaim, passage: Passage) -> bool:
@@ -273,23 +378,25 @@ def _write_semantic_index(passages: list[SemanticPassage]) -> None:
 
 
 def _analyze_passage(
-    model: TemporalModel,
+    primary_model: TemporalModel,
+    fallback_model: Optional[TemporalModel],
     item: tuple[StoredDocument, list[Passage], int, Passage],
-) -> tuple[str, list[ExtractedClaim], bool]:
+) -> tuple[str, list[ExtractedClaim], bool, str, str]:
     """Analyze one passage; safe to execute in a worker thread."""
     document, passages, index, passage = item
     context = _context(passages, index)
-    extraction, cache_hit = _extract_with_cache(
-        model, document, passage, context
+    extraction, cache_hit, extraction_model, cascade_stage = _extract_with_cascade(
+        primary_model, fallback_model, document, passage, context
     )
     accepted = [
         claim for claim in extraction.claims if _valid_claim(claim, passage)
     ]
-    return context, accepted, cache_hit
+    return context, accepted, cache_hit, extraction_model, cascade_stage
 
 
 def build_temporal_index(
     model: TemporalModel,
+    fallback_model: Optional[TemporalModel] = None,
     document_ids: set[str] | None = None,
     max_passages: int | None = None,
     workers: int = 1,
@@ -315,7 +422,7 @@ def build_temporal_index(
         if max_passages is not None and len(work) >= max_passages:
             break
 
-    pending: list[tuple[StoredDocument, Passage, str, ExtractedClaim]] = []
+    pending: list[tuple[StoredDocument, Passage, str, ExtractedClaim, str]] = []
     source_passages = len(work)
     failed_passages = 0
     failures: list[str] = []
@@ -349,6 +456,11 @@ def build_temporal_index(
             f"Temporal router selected {temporal_candidates} passages for Ollama "
             f"and skipped {total_passages - temporal_candidates}."
         )
+        if fallback_model:
+            progress(
+                f"Model cascade: {model.temporal_model} primary -> "
+                f"{fallback_model.temporal_model} fallback."
+            )
 
     # Build the complete semantic index before the slow generative stage. It is
     # immediately useful for undated retrieval, while dated retrieval safely
@@ -374,14 +486,14 @@ def build_temporal_index(
     # Keep only `effective_workers` tasks in flight. This bounds memory usage,
     # makes Ctrl+C responsive, and avoids flooding Ollama's request queue.
     results: dict[
-        int, tuple[StoredDocument, Passage, str, list[ExtractedClaim]]
+        int, tuple[StoredDocument, Passage, str, list[ExtractedClaim], str]
     ] = {}
     executor = ThreadPoolExecutor(
         max_workers=effective_workers,
         thread_name_prefix="temporal-extraction",
     )
     in_flight: dict[
-        Future[tuple[str, list[ExtractedClaim], bool]],
+        Future[tuple[str, list[ExtractedClaim], bool, str, str]],
         tuple[int, StoredDocument, Passage],
     ] = {}
     next_offset = 0
@@ -397,7 +509,7 @@ def build_temporal_index(
                 f"[{next_offset + 1}/{temporal_candidates}] "
                 f"Analyzing {passage.passage_id} ..."
             )
-        future = executor.submit(_analyze_passage, model, item)
+        future = executor.submit(_analyze_passage, model, fallback_model, item)
         in_flight[future] = (position, document, passage)
         next_offset += 1
 
@@ -410,7 +522,13 @@ def build_temporal_index(
             for future in sorted(completed, key=lambda item: in_flight[item][0]):
                 position, document, passage = in_flight.pop(future)
                 try:
-                    context, accepted, cache_hit = future.result()
+                    (
+                        context,
+                        accepted,
+                        cache_hit,
+                        extraction_model,
+                        cascade_stage,
+                    ) = future.result()
                 except Exception as error:
                     failed_passages += 1
                     scan_status[passage.passage_id] = "failed"
@@ -426,13 +544,20 @@ def build_temporal_index(
                         scan_status[passage.passage_id] = "analyzed_no_claim"
                     else:
                         scan_status[passage.passage_id] = "completed"
-                    results[position] = (document, passage, context, accepted)
+                    results[position] = (
+                        document,
+                        passage,
+                        context,
+                        accepted,
+                        extraction_model,
+                    )
                     if progress:
                         source = "cache" if cache_hit else "model"
                         elapsed = time.monotonic() - started_at
                         progress(
                             f"[{len(results) + failed_passages}/{temporal_candidates} complete] "
-                            f"{passage.passage_id}: Done via {source}: "
+                            f"{passage.passage_id}: Done via {source} "
+                            f"({cascade_stage}: {extraction_model}): "
                             f"{len(accepted)} accepted claim(s); "
                             f"elapsed {elapsed / 60:.1f} min"
                         )
@@ -448,8 +573,11 @@ def build_temporal_index(
     # Completion order is nondeterministic, so restore corpus order before
     # assigning stable claim IDs and writing the index.
     for position in sorted(results):
-        document, passage, context, accepted = results[position]
-        pending.extend((document, passage, context, claim) for claim in accepted)
+        document, passage, context, accepted, extraction_model = results[position]
+        pending.extend(
+            (document, passage, context, claim, extraction_model)
+            for claim in accepted
+        )
 
     semantic_passages = _build_semantic_passages(
         work, passage_embeddings, routing, scan_status, model.embedding_model
@@ -469,7 +597,9 @@ def build_temporal_index(
     )
 
     claims: list[TemporalClaim] = []
-    for position, ((document, passage, context, extracted), embedding) in enumerate(
+    for position, (
+        (document, passage, context, extracted, extraction_model), embedding
+    ) in enumerate(
         zip(pending, embeddings), start=1
     ):
         metadata = document.metadata
@@ -497,7 +627,7 @@ def build_temporal_index(
                 valid_to=extracted.valid_to,
                 date_basis=extracted.date_basis,
                 temporal_confidence=extracted.confidence,
-                extraction_model=model.temporal_model,
+                extraction_model=extraction_model,
                 embedding_model=model.embedding_model,
                 embedding=embedding,
             )
@@ -515,7 +645,10 @@ def build_temporal_index(
         indexed_claims=len(claims),
         skipped_passages=skipped_passages,
         failed_passages=failed_passages,
-        extraction_model=model.temporal_model,
+        extraction_model=(
+            f"{model.temporal_model} -> {fallback_model.temporal_model}"
+            if fallback_model else model.temporal_model
+        ),
         embedding_model=model.embedding_model,
         index_file=str(config.RETRIEVAL_INDEX_PATH),
         semantic_passages=len(semantic_passages),

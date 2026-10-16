@@ -44,7 +44,7 @@ conflates:
 |---|---|---|
 | Full semantic passage index | What passages are relevant, and where do they occur in the source sequence? | Embeddings for every passage plus previous/next passage links |
 | Temporal routing | Which passages need expensive temporal analysis? | High-recall automatic tags for temporal expressions, quantities, exceptions, and rule-version language |
-| Claim atomization | What independent regulatory propositions occur in a routed passage? | Local instruction model with exact evidence spans |
+| Claim atomization | What independent regulatory propositions occur in a routed passage? | Fast 3B structured extractor with an 8B fallback for invalid, uncertain, or unresolved results |
 | Temporal semantics | Is each proposition operative, historical, transitional, proposed, rejected, commentary, an example, or unclear—and what interval is supported? | Structured model output stored before retrieval |
 | Applicability-constrained retrieval | Which temporally eligible claim best matches the question? | Date filtering followed by dense semantic and BM25 ranking |
 | Meaning verification | Did the explanation retain the selected claim's conditions, exceptions, negation, dates, forms, and quantities? | Existing atomic-fact verifier and release gate |

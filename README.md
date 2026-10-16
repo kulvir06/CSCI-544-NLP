@@ -15,8 +15,9 @@ effective dates. It uses a dual-index pipeline:
 2. Every passage receives a semantic embedding plus previous/next passage links.
 3. A high-recall automatic router tags passages containing temporal expressions,
    quantities, exceptions, or substantive rule-version/change language.
-4. Only routed passages are sent to the generative temporal model, which splits
-   them into atomic regulatory claims.
+4. Routed passages first go to a fast 3B model. Invalid, low-confidence,
+   unknown-role, or unresolved historical results escalate to an 8B fallback.
+   The selected model splits the passage into atomic regulatory claims.
 5. Each claim receives an inferred role (`operative`, `historical`,
    `transitional`, `proposed`, `rejected`, `public_comment`, `example`, or
    `unknown`), an evidence quote, a supported date interval, and confidence.
@@ -40,14 +41,15 @@ pip install -r requirements.txt
 Install and start Ollama, then make sure the configured local models exist:
 
 ```bash
+ollama pull qwen2.5:3b
 ollama pull llama3.1:8b
 ollama pull nomic-embed-text
 ollama serve
 ```
 
-`llama3.1:8b` was already present on the development machine and
-`nomic-embed-text` was installed and verified. Model names can be changed in
-environment variables; see `.env.example`.
+`qwen2.5:3b` is the fast primary extractor, `llama3.1:8b` is the reliability
+fallback, and `nomic-embed-text` builds semantic vectors. Model names and output
+limits can be changed in environment variables; see `.env.example`.
 
 ## Build the corpus and automatic temporal index
 
@@ -71,6 +73,11 @@ default is two concurrent requests. Ollama must also be configured
 with `OLLAMA_NUM_PARALLEL=2` to execute them concurrently rather than queue them.
 On a 16 GB machine, start with two workers; additional workers can exhaust memory
 and reduce performance.
+
+The primary model is capped at 600 output tokens. The 8B fallback is capped at
+900 and runs only when the primary result is unusable or uncertain. Cache keys
+include the model name, so existing `llama3.1:8b` results remain reusable as
+fallback results after upgrading to the cascade.
 
 For a small development run:
 

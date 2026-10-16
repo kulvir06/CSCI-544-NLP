@@ -6,6 +6,7 @@ import argparse
 from pathlib import Path
 import sys
 
+from api import config
 from temporal.enrichment import build_temporal_index, document_ids_for_directory
 from temporal.ollama import OllamaClient
 
@@ -42,6 +43,16 @@ def main() -> None:
             "parallel processing."
         ),
     )
+    parser.add_argument(
+        "--primary-model",
+        default=None,
+        help="Fast primary temporal model (default: configured qwen2.5:3b).",
+    )
+    parser.add_argument(
+        "--fallback-model",
+        default=None,
+        help="Fallback model for uncertain/invalid results (default: llama3.1:8b).",
+    )
     arguments = parser.parse_args()
     if arguments.workers < 1:
         parser.error("--workers must be at least 1")
@@ -49,9 +60,24 @@ def main() -> None:
         document_ids_for_directory(arguments.input_dir)
         if arguments.input_dir else None
     )
-    client = OllamaClient()
+    primary_model = arguments.primary_model or config.OLLAMA_TEMPORAL_MODEL
+    fallback_model = (
+        arguments.fallback_model or config.OLLAMA_FALLBACK_TEMPORAL_MODEL
+    )
+    client = OllamaClient(
+        temporal_model=primary_model,
+        num_predict=config.OLLAMA_PRIMARY_NUM_PREDICT,
+    )
+    fallback_client = None
+    if fallback_model and fallback_model != primary_model:
+        fallback_client = OllamaClient(
+            temporal_model=fallback_model,
+            num_predict=config.OLLAMA_FALLBACK_NUM_PREDICT,
+        )
     available = client.available_models()
     required = {client.temporal_model, client.embedding_model}
+    if fallback_client:
+        required.add(fallback_client.temporal_model)
     missing = [model for model in required if not _installed(model, available)]
     if missing:
         raise SystemExit(
@@ -61,6 +87,7 @@ def main() -> None:
     try:
         report = build_temporal_index(
             client,
+            fallback_model=fallback_client,
             document_ids=document_ids,
             max_passages=arguments.max_passages,
             workers=arguments.workers,

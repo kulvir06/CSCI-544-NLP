@@ -54,6 +54,25 @@ class FakeTemporalModel:
         return [[1.0, float(index + 1)] for index, _ in enumerate(texts)]
 
 
+class LowConfidenceTemporalModel(FakeTemporalModel):
+    temporal_model = "fast-primary-model"
+
+    def extract_claims(self, prompt: str) -> ClaimExtraction:
+        return ClaimExtraction(
+            claims=[
+                ExtractedClaim(
+                    claim_text="The STEM OPT extension duration is unclear.",
+                    evidence_quote=(
+                        "The previous STEM OPT rule provided a 17 month extension."
+                    ),
+                    temporal_role=TemporalRole.UNKNOWN,
+                    date_basis="The primary model could not resolve the role.",
+                    confidence=0.4,
+                )
+            ]
+        )
+
+
 class TemporalEnrichmentTests(unittest.TestCase):
     def setUp(self):
         self.temporary_directory = TemporaryDirectory()
@@ -166,6 +185,65 @@ class TemporalEnrichmentTests(unittest.TestCase):
         semantic = load_semantic_passages()
         self.assertEqual(semantic[0].next_passage_id, passages[1].passage_id)
         self.assertEqual(semantic[1].previous_passage_id, passages[0].passage_id)
+
+    def test_low_confidence_primary_result_uses_fallback_model(self):
+        result = ingest_upload(
+            "stem-rule.txt",
+            (
+                "The previous STEM OPT rule provided a 17 month extension. "
+                "Effective May 10, 2016, the final rule provides a 24 month "
+                "STEM OPT extension."
+            ).encode("utf-8"),
+            DocumentMetadata(original_filename="stem-rule.txt"),
+        )
+        fallback = FakeTemporalModel()
+        with patch.object(
+            fallback, "extract_claims", wraps=fallback.extract_claims
+        ) as fallback_extraction:
+            report = build_temporal_index(
+                LowConfidenceTemporalModel(),
+                fallback_model=fallback,
+                document_ids={result.document.document_id},
+            )
+
+        claims = load_temporal_claims()
+        fallback_extraction.assert_called_once()
+        self.assertEqual(report.indexed_claims, 2)
+        self.assertTrue(
+            all(claim.extraction_model == fallback.temporal_model for claim in claims)
+        )
+
+    def test_existing_fallback_cache_skips_new_primary_model(self):
+        result = ingest_upload(
+            "stem-rule.txt",
+            (
+                "The previous STEM OPT rule provided a 17 month extension. "
+                "Effective May 10, 2016, the final rule provides a 24 month "
+                "STEM OPT extension."
+            ).encode("utf-8"),
+            DocumentMetadata(original_filename="stem-rule.txt"),
+        )
+        fallback = FakeTemporalModel()
+        build_temporal_index(
+            fallback,
+            document_ids={result.document.document_id},
+        )
+
+        primary = LowConfidenceTemporalModel()
+        with patch.object(
+            primary, "extract_claims", wraps=primary.extract_claims
+        ) as primary_extraction:
+            build_temporal_index(
+                primary,
+                fallback_model=fallback,
+                document_ids={result.document.document_id},
+            )
+
+        primary_extraction.assert_not_called()
+        claims = load_temporal_claims()
+        self.assertTrue(
+            all(claim.extraction_model == fallback.temporal_model for claim in claims)
+        )
 
     def test_unflagged_passage_is_searchable_but_temporally_unverified(self):
         result = ingest_upload(

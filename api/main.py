@@ -75,6 +75,7 @@ def health():
         "temporal_index_ready": config.RETRIEVAL_INDEX_PATH.exists(),
         "semantic_index_ready": config.SEMANTIC_PASSAGE_INDEX_PATH.exists(),
         "temporal_model": config.OLLAMA_TEMPORAL_MODEL,
+        "fallback_temporal_model": config.OLLAMA_FALLBACK_TEMPORAL_MODEL,
         "embedding_model": config.OLLAMA_EMBEDDING_MODEL,
     }
 
