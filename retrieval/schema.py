@@ -51,6 +51,12 @@ class IndexedPassage(BaseModel):
     temporal_confidence: Optional[float] = None
     temporal_evidence: Optional[str] = None
     extraction_method: Optional[str] = None
+    block_index: Optional[int] = None
+    previous_passage_id: Optional[str] = None
+    next_passage_id: Optional[str] = None
+    temporal_scan_required: Optional[bool] = None
+    temporal_scan_status: Optional[str] = None
+    temporal_routing_reasons: list[str] = Field(default_factory=list)
 
 
 class IndexBuildReport(BaseModel):

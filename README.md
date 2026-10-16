@@ -9,23 +9,25 @@ It is a research system, not legal advice.
 ## Updated architecture
 
 The retrieval index no longer depends on manually approved document-level
-effective dates. Instead, a local Ollama model processes the uploaded passages
-before retrieval:
+effective dates. It uses a dual-index pipeline:
 
 1. Local PDF, HTML, and text documents are parsed into candidate passages.
-2. The temporal model splits every passage into atomic regulatory claims.
-3. Each claim receives an inferred role (`operative`, `historical`,
+2. Every passage receives a semantic embedding plus previous/next passage links.
+3. A high-recall automatic router tags passages containing temporal expressions,
+   quantities, exceptions, or substantive rule-version/change language.
+4. Only routed passages are sent to the generative temporal model, which splits
+   them into atomic regulatory claims.
+5. Each claim receives an inferred role (`operative`, `historical`,
    `transitional`, `proposed`, `rejected`, `public_comment`, `example`, or
    `unknown`), an evidence quote, a supported date interval, and confidence.
-4. A local embedding model creates a semantic vector for each claim.
-5. For a dated question, claims are filtered by their inferred interval before
-   hybrid semantic/BM25 ranking.
-6. The selected claim is passed to the existing meaning-preservation and safety
+6. Retrieval searches every passage, expands context through sequence links,
+   and consults linked temporal claims for dated questions.
+7. The selected evidence is passed to the existing meaning-preservation and safety
    gates.
 
-The model is not allowed to invent missing temporal boundaries. Claims with an
-unknown interval remain usable for undated exploration, but a dated answer based
-only on them causes abstention.
+The model is not allowed to invent missing temporal boundaries. Unrouted,
+failed, or temporally unknown passages remain searchable, but a dated answer
+based only on them causes abstention rather than a false verification.
 
 ## One-time setup
 
@@ -61,11 +63,11 @@ python3 -m scripts.build_temporal_index \
   --workers 2
 ```
 
-The second command prints live progress for every passage. It can take many
-hours on its first full run because each passage is analyzed locally. Valid
-model responses are cached in `data/temporal_cache`, so pressing `Ctrl+C` is
-safe: rerun the same command later and completed passages will be loaded from
-the cache. The default is two concurrent requests. Ollama must also be configured
+The second command first embeds every passage in inexpensive batches, then sends
+only automatically routed passages through the generative temporal model. Both
+embeddings and valid model responses are cached, so pressing `Ctrl+C` is safe:
+rerun the same command later and completed work will be loaded from cache. The
+default is two concurrent requests. Ollama must also be configured
 with `OLLAMA_NUM_PARALLEL=2` to execute them concurrently rather than queue them.
 On a 16 GB machine, start with two workers; additional workers can exhaust memory
 and reduce performance.
@@ -115,9 +117,11 @@ ranking as semantic ranking.
 ## Storage
 
 - `data/passages`: passages selected during ingestion
+- `data/embedding_cache`: reusable semantic vectors keyed by text and model
 - `data/temporal_cache`: cached structured model extractions
-- `data/index/temporal_claims.jsonl`: atomic claims, temporal fields, provenance,
-  and embeddings
+- `data/index/semantic_passages.jsonl`: every passage, routing decision,
+  sequence links, provenance, and semantic embedding
+- `data/index/temporal_claims.jsonl`: temporal claims linked to source passages
 - `data/reports`: ingestion reports
 
 ChromaDB is not used. The prototype uses an auditable local JSONL index because

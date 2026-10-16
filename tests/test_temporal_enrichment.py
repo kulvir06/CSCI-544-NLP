@@ -10,7 +10,11 @@ from corpus.pipeline import ingest_upload
 from corpus.schema import DocumentMetadata, DocumentStatus, Passage, SourceTier
 from retrieval.schema import RetrievalRequest, TemporalVerdict
 from retrieval.search import retrieve
-from temporal.enrichment import build_temporal_index, load_temporal_claims
+from temporal.enrichment import (
+    build_temporal_index,
+    load_semantic_passages,
+    load_temporal_claims,
+)
 from temporal.schema import (
     ClaimExtraction,
     ExtractedClaim,
@@ -63,7 +67,9 @@ class TemporalEnrichmentTests(unittest.TestCase):
             ("REVIEW_DIR", self.base / "reviews"),
             ("INDEX_DIR", self.base / "index"),
             ("RETRIEVAL_INDEX_PATH", self.base / "index" / "temporal_claims.jsonl"),
+            ("SEMANTIC_PASSAGE_INDEX_PATH", self.base / "index" / "semantic_passages.jsonl"),
             ("TEMPORAL_CACHE_DIR", self.base / "temporal_cache"),
+            ("EMBEDDING_CACHE_DIR", self.base / "embedding_cache"),
             ("MANIFEST_DIR", self.base / "manifests"),
             ("MANIFEST_PATH", self.base / "manifests" / "documents.jsonl"),
         ):
@@ -137,6 +143,7 @@ class TemporalEnrichmentTests(unittest.TestCase):
                 ),
                 block_index=number,
                 relevance_score=5.0,
+                selection_reasons=["rule:quantity"],
             )
             for number in (1, 2)
         ]
@@ -156,6 +163,43 @@ class TemporalEnrichmentTests(unittest.TestCase):
         self.assertIn("Using 2 parallel workers", "\n".join(messages))
         self.assertEqual(claims[0].source_passage_id, passages[0].passage_id)
         self.assertEqual(claims[2].source_passage_id, passages[1].passage_id)
+        semantic = load_semantic_passages()
+        self.assertEqual(semantic[0].next_passage_id, passages[1].passage_id)
+        self.assertEqual(semantic[1].previous_passage_id, passages[0].passage_id)
+
+    def test_unflagged_passage_is_searchable_but_temporally_unverified(self):
+        result = ingest_upload(
+            "employment.txt",
+            b"F-1 students require authorization for off-campus employment.",
+            DocumentMetadata(original_filename="employment.txt"),
+        )
+        model = FakeTemporalModel()
+        with patch.object(
+            model, "extract_claims", wraps=model.extract_claims
+        ) as extraction:
+            report = build_temporal_index(
+                model, document_ids={result.document.document_id}
+            )
+
+        semantic = load_semantic_passages()
+        self.assertEqual(report.semantic_passages, 1)
+        self.assertEqual(report.temporal_candidates, 0)
+        self.assertEqual(report.indexed_claims, 0)
+        extraction.assert_not_called()
+        self.assertFalse(semantic[0].temporal_scan_required)
+        self.assertEqual(semantic[0].temporal_scan_status, "not_required")
+
+        response = retrieve(
+            RetrievalRequest(
+                query="What authorization is required for F-1 off-campus employment?",
+                relevant_date=date(2026, 1, 1),
+            )
+        )
+        self.assertEqual(response.retrieval_status.value, "found")
+        self.assertEqual(
+            response.temporal_verdict,
+            TemporalVerdict.INSUFFICIENT_TEMPORAL_EVIDENCE,
+        )
 
     def test_temporal_filter_runs_before_claim_ranking(self):
         result = ingest_upload(

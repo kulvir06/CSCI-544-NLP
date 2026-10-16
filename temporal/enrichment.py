@@ -6,6 +6,7 @@ from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 import hashlib
 import json
 from pathlib import Path
+import re
 import time
 from typing import Callable, Protocol
 
@@ -15,10 +16,31 @@ from corpus.storage import ensure_data_directories
 from temporal.schema import (
     ClaimExtraction,
     ExtractedClaim,
+    SemanticPassage,
     TemporalClaim,
     TemporalIndexReport,
     TemporalRole,
 )
+
+
+ROLE_CHANGE_PATTERN = re.compile(
+    r"\b(?:prior to|previous(?:ly)?|formerly|supersed(?:e|ed|ing)|"
+    r"replac(?:e|ed|ing)|no longer|interim rule|final rule|proposed rule|"
+    r"transition(?:al)?|expire[sd]?|expiration)\b",
+    re.IGNORECASE,
+)
+HIGH_RISK_PASSAGE_REASONS = {
+    "temporal_expression",
+    "rule:quantity",
+    "rule:exception",
+}
+SUBSTANTIVE_RULE_REASONS = {
+    "rule:obligation",
+    "rule:condition",
+    "rule:quantity",
+    "rule:exception",
+    "rule:form",
+}
 
 
 class TemporalModel(Protocol):
@@ -121,6 +143,83 @@ def _valid_claim(claim: ExtractedClaim, passage: Passage) -> bool:
     return bool(normalized_quote) and normalized_quote in normalized_source
 
 
+def classify_temporal_route(
+    passages: list[Passage], index: int
+) -> tuple[bool, list[str], float]:
+    """High-recall, non-generative routing for expensive temporal analysis."""
+    passage = passages[index]
+    reasons: list[str] = []
+    selected_reasons = set(passage.selection_reasons)
+    matched_selection = sorted(selected_reasons & HIGH_RISK_PASSAGE_REASONS)
+    reasons.extend(matched_selection)
+    if (
+        ROLE_CHANGE_PATTERN.search(passage.text)
+        and selected_reasons & SUBSTANTIVE_RULE_REASONS
+    ):
+        reasons.append("temporal_role_or_change_language")
+
+    reasons = list(dict.fromkeys(reasons))
+    if not reasons:
+        return False, [], 0.75
+    confidence = 0.95 if "temporal_expression" in reasons else 0.85
+    return True, reasons, confidence
+
+
+def _embedding_cache_path(text: str, model_name: str) -> Path:
+    digest = hashlib.sha256(
+        f"v1\0{model_name}\0{text}".encode("utf-8")
+    ).hexdigest()
+    return config.EMBEDDING_CACHE_DIR / f"{digest}.json"
+
+
+def _embed_with_cache(
+    model: TemporalModel,
+    texts: list[str],
+    progress: Callable[[str], None] | None = None,
+    label: str = "passages",
+) -> list[list[float]]:
+    """Embed texts in batches and persist vectors by content hash."""
+    vectors: list[list[float] | None] = [None] * len(texts)
+    misses: dict[Path, tuple[str, list[int]]] = {}
+    for position, text in enumerate(texts):
+        path = _embedding_cache_path(text, model.embedding_model)
+        if path.exists():
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8"))
+                if isinstance(payload, list) and payload:
+                    vectors[position] = [float(value) for value in payload]
+                    continue
+            except (OSError, TypeError, ValueError, json.JSONDecodeError):
+                pass
+        if path in misses:
+            misses[path][1].append(position)
+        else:
+            misses[path] = (text, [position])
+
+    unique_misses = list(misses.items())
+    cached_count = len(texts) - sum(len(item[1][1]) for item in unique_misses)
+    if progress:
+        progress(
+            f"Embedding {len(texts)} {label}: {cached_count} cached, "
+            f"{len(unique_misses)} new unique text(s)."
+        )
+    for start in range(0, len(unique_misses), 32):
+        batch = unique_misses[start:start + 32]
+        if progress:
+            progress(
+                f"Embedding new {label} {start + 1}-"
+                f"{start + len(batch)} of {len(unique_misses)} ..."
+            )
+        embedded = model.embed([item[1][0] for item in batch])
+        for (path, (_, positions)), vector in zip(batch, embedded):
+            path.write_text(json.dumps(vector, separators=(",", ":")), encoding="utf-8")
+            for position in positions:
+                vectors[position] = vector
+    if any(vector is None for vector in vectors):
+        raise ValueError("Embedding cache did not produce a vector for every text")
+    return [vector for vector in vectors if vector is not None]
+
+
 def _analyze_passage(
     model: TemporalModel,
     item: tuple[StoredDocument, list[Passage], int, Passage],
@@ -165,18 +264,40 @@ def build_temporal_index(
             break
 
     pending: list[tuple[StoredDocument, Passage, str, ExtractedClaim]] = []
-    source_passages = 0
-    skipped_passages = 0
+    source_passages = len(work)
     failed_passages = 0
     failures: list[str] = []
 
     total_passages = len(work)
+    routing: dict[str, tuple[bool, list[str], float]] = {}
+    candidate_work: list[
+        tuple[int, tuple[StoredDocument, list[Passage], int, Passage]]
+    ] = []
+    for position, item in enumerate(work, start=1):
+        _, passages, index, passage = item
+        decision = classify_temporal_route(passages, index)
+        routing[passage.passage_id] = decision
+        if decision[0]:
+            candidate_work.append((position, item))
+    temporal_candidates = len(candidate_work)
+    skipped_passages = total_passages - temporal_candidates
+    scan_status = {
+        item[3].passage_id: (
+            "pending" if routing[item[3].passage_id][0] else "not_required"
+        )
+        for item in work
+    }
+
     started_at = time.monotonic()
     if progress:
         progress(
-            f"Found {len(documents)} documents and {total_passages} passages to analyze."
+            f"Found {len(documents)} documents and {total_passages} passages."
         )
-    effective_workers = min(workers, total_passages) if total_passages else 1
+        progress(
+            f"Temporal router selected {temporal_candidates} passages for Ollama "
+            f"and skipped {total_passages - temporal_candidates}."
+        )
+    effective_workers = min(workers, temporal_candidates) if temporal_candidates else 1
     if progress:
         label = "worker" if effective_workers == 1 else "parallel workers"
         progress(f"Using {effective_workers} {label}.")
@@ -198,13 +319,15 @@ def build_temporal_index(
 
     def submit_next() -> None:
         nonlocal next_offset
-        if next_offset >= total_passages:
+        if next_offset >= temporal_candidates:
             return
-        position = next_offset + 1
-        item = work[next_offset]
+        position, item = candidate_work[next_offset]
         document, _, _, passage = item
         if progress:
-            progress(f"[{position}/{total_passages}] Analyzing {passage.passage_id} ...")
+            progress(
+                f"[{next_offset + 1}/{temporal_candidates}] "
+                f"Analyzing {passage.passage_id} ..."
+            )
         future = executor.submit(_analyze_passage, model, item)
         in_flight[future] = (position, document, passage)
         next_offset += 1
@@ -217,26 +340,29 @@ def build_temporal_index(
             completed, _ = wait(in_flight, return_when=FIRST_COMPLETED)
             for future in sorted(completed, key=lambda item: in_flight[item][0]):
                 position, document, passage = in_flight.pop(future)
-                source_passages += 1
                 try:
                     context, accepted, cache_hit = future.result()
                 except Exception as error:
                     failed_passages += 1
+                    scan_status[passage.passage_id] = "failed"
                     failures.append(f"{passage.passage_id}: {error}")
                     if progress:
                         progress(
-                            f"[{source_passages}/{total_passages} complete] "
+                            f"[{len(results) + failed_passages}/{temporal_candidates} complete] "
                             f"{passage.passage_id} failed: {error}"
                         )
                 else:
                     if not accepted:
                         skipped_passages += 1
+                        scan_status[passage.passage_id] = "analyzed_no_claim"
+                    else:
+                        scan_status[passage.passage_id] = "completed"
                     results[position] = (document, passage, context, accepted)
                     if progress:
                         source = "cache" if cache_hit else "model"
                         elapsed = time.monotonic() - started_at
                         progress(
-                            f"[{source_passages}/{total_passages} complete] "
+                            f"[{len(results) + failed_passages}/{temporal_candidates} complete] "
                             f"{passage.passage_id}: Done via {source}: "
                             f"{len(accepted)} accepted claim(s); "
                             f"elapsed {elapsed / 60:.1f} min"
@@ -256,14 +382,62 @@ def build_temporal_index(
         document, passage, context, accepted = results[position]
         pending.extend((document, passage, context, claim) for claim in accepted)
 
-    embeddings: list[list[float]] = []
-    for start in range(0, len(pending), 32):
-        end = min(start + 32, len(pending))
-        if progress:
-            progress(f"Embedding claims {start + 1}-{end} of {len(pending)} ...")
-        embeddings.extend(
-            model.embed([item[3].claim_text for item in pending[start:end]])
+    passage_embeddings = _embed_with_cache(
+        model,
+        [item[3].text for item in work],
+        progress=progress,
+        label="passages",
+    )
+    semantic_passages: list[SemanticPassage] = []
+    for item, embedding in zip(work, passage_embeddings):
+        document, passages, index, passage = item
+        metadata = document.metadata
+        required, reasons, routing_confidence = routing[passage.passage_id]
+        semantic_passages.append(
+            SemanticPassage(
+                passage_id=passage.passage_id,
+                claim_id=passage.passage_id,
+                document_id=document.document_id,
+                text=passage.text,
+                block_index=passage.block_index,
+                previous_passage_id=(
+                    passages[index - 1].passage_id if index > 0 else None
+                ),
+                next_passage_id=(
+                    passages[index + 1].passage_id
+                    if index + 1 < len(passages) else None
+                ),
+                section=passage.section,
+                page_number=passage.page_number,
+                passage_relevance_score=passage.relevance_score,
+                title=metadata.title,
+                issuer=metadata.issuer,
+                source_url=metadata.source_url,
+                source_tier=document.source_tier,
+                document_status=metadata.status,
+                temporal_scan_required=required,
+                temporal_scan_status=scan_status[passage.passage_id],
+                temporal_routing_reasons=reasons,
+                temporal_routing_confidence=routing_confidence,
+                embedding_model=model.embedding_model,
+                embedding=embedding,
+            )
         )
+    semantic_body = "\n".join(
+        passage.model_dump_json() for passage in semantic_passages
+    )
+    config.SEMANTIC_PASSAGE_INDEX_PATH.write_text(
+        f"{semantic_body}\n" if semantic_body else "", encoding="utf-8"
+    )
+    if progress:
+        progress(f"Semantic index written to {config.SEMANTIC_PASSAGE_INDEX_PATH}")
+
+    embeddings = _embed_with_cache(
+        model,
+        [item[3].claim_text for item in pending],
+        progress=progress,
+        label="temporal claims",
+    )
 
     claims: list[TemporalClaim] = []
     for position, ((document, passage, context, extracted), embedding) in enumerate(
@@ -315,6 +489,9 @@ def build_temporal_index(
         extraction_model=model.temporal_model,
         embedding_model=model.embedding_model,
         index_file=str(config.RETRIEVAL_INDEX_PATH),
+        semantic_passages=len(semantic_passages),
+        temporal_candidates=temporal_candidates,
+        semantic_index_file=str(config.SEMANTIC_PASSAGE_INDEX_PATH),
         failures=failures[:100],
     )
 
@@ -380,3 +557,15 @@ def load_temporal_claims() -> list[TemporalClaim]:
                 )
             )
     return claims
+
+
+def load_semantic_passages() -> list[SemanticPassage]:
+    if not config.SEMANTIC_PASSAGE_INDEX_PATH.exists():
+        return []
+    return [
+        SemanticPassage.model_validate_json(line)
+        for line in config.SEMANTIC_PASSAGE_INDEX_PATH.read_text(
+            encoding="utf-8"
+        ).splitlines()
+        if line.strip()
+    ]

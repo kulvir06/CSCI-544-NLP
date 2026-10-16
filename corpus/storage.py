@@ -29,6 +29,7 @@ def ensure_data_directories() -> None:
         config.REVIEW_DIR,
         config.INDEX_DIR,
         config.TEMPORAL_CACHE_DIR,
+        config.EMBEDDING_CACHE_DIR,
         config.MANIFEST_DIR,
     ):
         path.mkdir(parents=True, exist_ok=True)

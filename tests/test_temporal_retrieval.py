@@ -42,6 +42,7 @@ class TemporalRetrievalTests(unittest.TestCase):
             ("REVIEW_LOG_PATH", self.base / "reviews" / "document_reviews.jsonl"),
             ("INDEX_DIR", self.base / "index"),
             ("RETRIEVAL_INDEX_PATH", self.base / "index" / "approved_passages.jsonl"),
+            ("SEMANTIC_PASSAGE_INDEX_PATH", self.base / "index" / "semantic_passages.jsonl"),
             ("MANIFEST_DIR", self.base / "manifests"),
             ("MANIFEST_PATH", self.base / "manifests" / "documents.jsonl"),
         ):

@@ -2,11 +2,11 @@
 
 ## Revised project focus
 
-Given locally uploaded F-1 employment material, automatically decompose mixed
-passages into atomic legal claims, infer the temporal scope and rhetorical role
-of each claim before retrieval, retrieve claims applicable to a user-selected
-date, and verify that a plain-language explanation preserves legally important
-meaning.
+Given locally uploaded F-1 employment material, semantically index every ordered
+passage, selectively decompose temporal-risk passages into atomic legal claims,
+infer the temporal scope and rhetorical role of those claims before retrieval,
+retrieve evidence applicable to a user-selected date, and verify that a
+plain-language explanation preserves legally important meaning.
 
 The revised target failure is more precise than document-version error. A
 document can be applicable while an individual sentence inside it reports an
@@ -42,7 +42,9 @@ conflates:
 
 | Layer | Question answered | Implementation |
 |---|---|---|
-| Claim atomization | What independent regulatory propositions occur in this passage? | Local instruction model with exact evidence spans |
+| Full semantic passage index | What passages are relevant, and where do they occur in the source sequence? | Embeddings for every passage plus previous/next passage links |
+| Temporal routing | Which passages need expensive temporal analysis? | High-recall automatic tags for temporal expressions, quantities, exceptions, and rule-version language |
+| Claim atomization | What independent regulatory propositions occur in a routed passage? | Local instruction model with exact evidence spans |
 | Temporal semantics | Is each proposition operative, historical, transitional, proposed, rejected, commentary, an example, or unclear—and what interval is supported? | Structured model output stored before retrieval |
 | Applicability-constrained retrieval | Which temporally eligible claim best matches the question? | Date filtering followed by dense semantic and BM25 ranking |
 | Meaning verification | Did the explanation retain the selected claim's conditions, exceptions, negation, dates, forms, and quantities? | Existing atomic-fact verifier and release gate |
@@ -80,7 +82,8 @@ invented here. Use “to the best of our knowledge” and avoid “the first eve
 
 | Research question | Metric |
 |---|---|
-| Does the model split mixed passages into the correct atomic claims? | Claim boundary precision/recall and exact-evidence validity |
+| Does the router retain passages that require temporal analysis? | Temporal-routing recall, false-negative rate, and model-call reduction |
+| Does the model split routed passages into the correct atomic claims? | Claim boundary precision/recall and exact-evidence validity |
 | Does it recognize operative versus non-operative language? | Macro-F1 over temporal-role labels |
 | Are inferred temporal scopes correct? | Start-date accuracy, end-date accuracy, interval overlap, and unsupported-date rate |
 | Does filter-first retrieval find the applicable claim? | Applicable-claim Recall@K, MRR, and wrong-period retrieval rate |
@@ -98,6 +101,7 @@ the experiment; without them, automatic temporal extraction cannot be evaluated.
 3. Automatic claim-level temporal filtering with BM25
 4. Automatic claim-level filtering with hybrid semantic retrieval
 5. Full system with meaning-preservation verification
+6. Selective temporal routing versus temporal analysis of every passage
 
 The main empirical novelty claim is supported only if claim-level filtering
 reduces subtle wrong-period retrieval and the full system further reduces

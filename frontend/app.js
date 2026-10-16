@@ -112,6 +112,8 @@ function renderEvidence(data) {
           <span>·</span><span>${escapeHtml(data.retrieval.ranking_method)} ${hit.score.toFixed(3)}</span>
           ${passage.temporal_role ? badge(humanize(passage.temporal_role), toneFor(hit.temporal_status)) : ""}
           ${passage.temporal_confidence != null ? `<span>· temporal confidence ${Math.round(passage.temporal_confidence * 100)}%</span>` : ""}
+          ${passage.temporal_scan_status ? badge(`scan: ${humanize(passage.temporal_scan_status)}`, passage.temporal_scan_status === "completed" ? "safe" : "warning") : ""}
+          ${passage.block_index != null ? `<span>· document position ${passage.block_index}</span>` : ""}
           ${badge(humanize(hit.temporal_status), toneFor(hit.temporal_status))}
           ${source}
         </div>

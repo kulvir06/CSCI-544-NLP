@@ -6,6 +6,7 @@ from collections import Counter
 from datetime import date
 import math
 import re
+from typing import Union
 
 from api import config
 from corpus.schema import CorpusUse
@@ -18,9 +19,9 @@ from retrieval.schema import (
     RetrievalStatus,
     TemporalVerdict,
 )
-from temporal.enrichment import load_temporal_claims
+from temporal.enrichment import load_semantic_passages, load_temporal_claims
 from temporal.ollama import OllamaClient, OllamaUnavailableError
-from temporal.schema import TemporalClaim, TemporalRole
+from temporal.schema import SemanticPassage, TemporalClaim, TemporalRole
 
 
 TOKEN_PATTERN = re.compile(r"[A-Za-z0-9]+(?:-[A-Za-z0-9]+)?")
@@ -43,6 +44,7 @@ NON_NORMATIVE_ROLES = {
     TemporalRole.PUBLIC_COMMENT,
     TemporalRole.EXAMPLE,
 }
+RankablePassage = Union[TemporalClaim, SemanticPassage]
 
 
 def _tokens(text: str) -> list[str]:
@@ -60,7 +62,7 @@ def _query_tokens(query: str) -> list[str]:
     return tokens
 
 
-def _has_substantive_overlap(query: str, claim: TemporalClaim) -> bool:
+def _has_substantive_overlap(query: str, claim: RankablePassage) -> bool:
     """Keep generic words from making an unrelated temporal claim look valid."""
     query_terms = set(_tokens(query))
     claim_terms = set(_tokens(claim.text))
@@ -68,7 +70,7 @@ def _has_substantive_overlap(query: str, claim: TemporalClaim) -> bool:
     return len(query_terms & claim_terms) >= required
 
 
-def _bm25_scores(query: str, claims: list[TemporalClaim]) -> list[float]:
+def _bm25_scores(query: str, claims: list[RankablePassage]) -> list[float]:
     if not claims:
         return []
     query_terms = set(_query_tokens(query))
@@ -145,7 +147,9 @@ def _temporal_status(
     return PassageTemporalStatus.APPLICABLE
 
 
-def _query_embedding(query: str, claims: list[TemporalClaim]) -> list[float] | None:
+def _query_embedding(
+    query: str, claims: list[RankablePassage]
+) -> Union[list[float], None]:
     embedded_claim = next((claim for claim in claims if claim.embedding), None)
     if not embedded_claim:
         return None
@@ -159,8 +163,8 @@ def _query_embedding(query: str, claims: list[TemporalClaim]) -> list[float] | N
 
 def _rank(
     query: str,
-    claims: list[TemporalClaim],
-) -> tuple[list[tuple[TemporalClaim, float, float, float]], bool]:
+    claims: list[RankablePassage],
+) -> tuple[list[tuple[RankablePassage, float, float, float]], bool]:
     lexical = _bm25_scores(query, claims)
     query_embedding = _query_embedding(query, claims)
     semantic = [
@@ -168,7 +172,7 @@ def _rank(
         for claim in claims
     ]
     maximum_lexical = max(lexical, default=0.0)
-    ranked: list[tuple[TemporalClaim, float, float, float]] = []
+    ranked: list[tuple[RankablePassage, float, float, float]] = []
     for claim, lexical_score, semantic_score in zip(claims, lexical, semantic):
         if lexical_score <= 0 and semantic_score <= 0:
             continue
@@ -214,7 +218,7 @@ def _as_passage(claim: TemporalClaim) -> IndexedPassage:
     )
 
 
-def retrieve(request: RetrievalRequest) -> RetrievalResponse:
+def _retrieve_claims(request: RetrievalRequest) -> RetrievalResponse:
     claims = load_temporal_claims()
     if not claims:
         return RetrievalResponse(
@@ -319,3 +323,190 @@ def retrieve(request: RetrievalRequest) -> RetrievalResponse:
             for claim, combined, lexical, semantic in selected
         ],
     )
+
+
+def _as_semantic_passage(
+    passage: SemanticPassage,
+    claim: Union[TemporalClaim, None] = None,
+) -> IndexedPassage:
+    if claim is not None:
+        indexed = _as_passage(claim)
+        indexed.block_index = passage.block_index
+        indexed.previous_passage_id = passage.previous_passage_id
+        indexed.next_passage_id = passage.next_passage_id
+        indexed.temporal_scan_required = passage.temporal_scan_required
+        indexed.temporal_scan_status = passage.temporal_scan_status
+        indexed.temporal_routing_reasons = passage.temporal_routing_reasons
+        return indexed
+    return IndexedPassage(
+        passage_id=passage.passage_id,
+        source_passage_id=passage.passage_id,
+        document_id=passage.document_id,
+        text=passage.text,
+        section=passage.section,
+        page_number=passage.page_number,
+        passage_relevance_score=passage.passage_relevance_score,
+        title=passage.title,
+        issuer=passage.issuer,
+        source_url=passage.source_url,
+        source_tier=passage.source_tier,
+        corpus_use=CorpusUse.MEANING_ONLY,
+        document_status=passage.document_status,
+        extraction_method="full_semantic_passage",
+        block_index=passage.block_index,
+        previous_passage_id=passage.previous_passage_id,
+        next_passage_id=passage.next_passage_id,
+        temporal_scan_required=passage.temporal_scan_required,
+        temporal_scan_status=passage.temporal_scan_status,
+        temporal_routing_reasons=passage.temporal_routing_reasons,
+    )
+
+
+def _best_temporal_claim(
+    query: str,
+    passage: SemanticPassage,
+    claims_by_passage: dict[str, list[TemporalClaim]],
+    relevant_date: date,
+) -> tuple[PassageTemporalStatus, Union[TemporalClaim, None]]:
+    claims = claims_by_passage.get(passage.passage_id, [])
+    if not claims:
+        return PassageTemporalStatus.INSUFFICIENT_EVIDENCE, None
+    overlapping = [claim for claim in claims if _has_substantive_overlap(query, claim)]
+    candidates = overlapping or claims
+    statuses = {
+        claim.claim_id: _temporal_status(claim, relevant_date)
+        for claim in candidates
+    }
+    for preferred in (
+        PassageTemporalStatus.APPLICABLE,
+        PassageTemporalStatus.INSUFFICIENT_EVIDENCE,
+        PassageTemporalStatus.NOT_APPLICABLE,
+    ):
+        matching = [
+            claim for claim in candidates if statuses[claim.claim_id] == preferred
+        ]
+        if matching:
+            lexical = _bm25_scores(query, matching)
+            best_position = max(
+                range(len(matching)), key=lambda position: lexical[position]
+            )
+            return preferred, matching[best_position]
+    return PassageTemporalStatus.INSUFFICIENT_EVIDENCE, None
+
+
+def _retrieve_semantic_passages(
+    request: RetrievalRequest,
+    passages: list[SemanticPassage],
+    claims: list[TemporalClaim],
+) -> RetrievalResponse:
+    passages = [
+        passage
+        for passage in passages
+        if _has_substantive_overlap(request.query, passage)
+    ]
+    if not passages:
+        return RetrievalResponse(
+            query=request.query,
+            relevant_date=request.relevant_date,
+            retrieval_status=RetrievalStatus.NO_RELEVANT_PASSAGES,
+            temporal_verdict=(
+                TemporalVerdict.INSUFFICIENT_TEMPORAL_EVIDENCE
+                if request.relevant_date else TemporalVerdict.NOT_REQUESTED
+            ),
+            ranking_method="full_passage_hybrid_then_temporal_verification",
+        )
+
+    ranked, used_embeddings = _rank(request.query, passages)
+    ranking_method = (
+        "full_passage_hybrid_then_temporal_verification"
+        if used_embeddings else "full_passage_bm25_then_temporal_verification"
+    )
+    if not ranked:
+        return RetrievalResponse(
+            query=request.query,
+            relevant_date=request.relevant_date,
+            retrieval_status=RetrievalStatus.NO_RELEVANT_PASSAGES,
+            temporal_verdict=(
+                TemporalVerdict.INSUFFICIENT_TEMPORAL_EVIDENCE
+                if request.relevant_date else TemporalVerdict.NOT_REQUESTED
+            ),
+            ranking_method=ranking_method,
+        )
+
+    if not request.relevant_date:
+        selected = ranked[:request.top_k]
+        return RetrievalResponse(
+            query=request.query,
+            retrieval_status=RetrievalStatus.FOUND,
+            temporal_verdict=TemporalVerdict.NOT_REQUESTED,
+            ranking_method=ranking_method,
+            hits=[
+                RetrievalHit(
+                    passage=_as_semantic_passage(passage),
+                    score=round(combined, 6),
+                    lexical_score=round(lexical, 6),
+                    semantic_score=(
+                        round(semantic, 6) if used_embeddings else None
+                    ),
+                    temporal_status=PassageTemporalStatus.NOT_REQUESTED,
+                )
+                for passage, combined, lexical, semantic in selected
+            ],
+        )
+
+    claims_by_passage: dict[str, list[TemporalClaim]] = {}
+    for claim in claims:
+        claims_by_passage.setdefault(claim.source_passage_id, []).append(claim)
+    relevance_floor = ranked[0][1] * config.TEMPORAL_RELEVANCE_RATIO
+    relevant_ranked = [item for item in ranked if item[1] >= relevance_floor]
+    evaluated = []
+    for passage, combined, lexical, semantic in relevant_ranked:
+        status, claim = _best_temporal_claim(
+            request.query, passage, claims_by_passage, request.relevant_date
+        )
+        evaluated.append((passage, combined, lexical, semantic, status, claim))
+
+    applicable = [
+        item for item in evaluated if item[4] == PassageTemporalStatus.APPLICABLE
+    ]
+    if applicable:
+        selected_evaluated = applicable[:request.top_k]
+        verdict = TemporalVerdict.VERIFIED_APPLICABLE
+    else:
+        best_status = evaluated[0][4]
+        selected_evaluated = [
+            item for item in evaluated if item[4] == best_status
+        ][:request.top_k]
+        verdict = (
+            TemporalVerdict.INSUFFICIENT_TEMPORAL_EVIDENCE
+            if best_status == PassageTemporalStatus.INSUFFICIENT_EVIDENCE
+            else TemporalVerdict.VERIFIED_NOT_APPLICABLE
+        )
+
+    return RetrievalResponse(
+        query=request.query,
+        relevant_date=request.relevant_date,
+        retrieval_status=RetrievalStatus.FOUND,
+        temporal_verdict=verdict,
+        ranking_method=ranking_method,
+        hits=[
+            RetrievalHit(
+                passage=_as_semantic_passage(passage, claim),
+                score=round(combined, 6),
+                lexical_score=round(lexical, 6),
+                semantic_score=round(semantic, 6) if used_embeddings else None,
+                temporal_status=status,
+            )
+            for passage, combined, lexical, semantic, status, claim
+            in selected_evaluated
+        ],
+    )
+
+
+def retrieve(request: RetrievalRequest) -> RetrievalResponse:
+    semantic_passages = load_semantic_passages()
+    if semantic_passages:
+        return _retrieve_semantic_passages(
+            request, semantic_passages, load_temporal_claims()
+        )
+    return _retrieve_claims(request)
