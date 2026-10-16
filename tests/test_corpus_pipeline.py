@@ -172,6 +172,45 @@ class CorpusPipelineTests(unittest.TestCase):
             self.assertEqual(report.total_selected_passages, 1)
             self.assertTrue(Path(report.report_file).exists())
 
+    def test_batch_ingestion_uses_local_source_catalog_metadata(self):
+        with TemporaryDirectory() as temporary_directory:
+            base = Path(temporary_directory)
+            inputs = base / "inputs"
+            inputs.mkdir()
+            filename = "uscis-stem.txt"
+            (inputs / filename).write_text(
+                "USCIS guidance states that F-1 students on STEM OPT must "
+                "submit Form I-983 for a 24 month extension.",
+                encoding="utf-8",
+            )
+            (inputs / "source-catalog.csv").write_text(
+                "#,Title,Filename,Source organization,Original URL,"
+                "Publication / effective date,Topics,Status\n"
+                "1,STEM OPT Guidance,uscis-stem.txt,USCIS,"
+                "https://www.uscis.gov/example,Not stated,STEM OPT,Current\n",
+                encoding="utf-8",
+            )
+            with (
+                patch.object(config, "RAW_DOCUMENT_DIR", base / "raw"),
+                patch.object(config, "NORMALIZED_DOCUMENT_DIR", base / "normalized"),
+                patch.object(config, "PASSAGE_DIR", base / "passages"),
+                patch.object(config, "REPORT_DIR", base / "reports"),
+                patch.object(config, "REVIEW_DIR", base / "reviews"),
+                patch.object(config, "INDEX_DIR", base / "index"),
+                patch.object(config, "TEMPORAL_CACHE_DIR", base / "temporal_cache"),
+                patch.object(config, "EMBEDDING_CACHE_DIR", base / "embedding_cache"),
+                patch.object(config, "MANIFEST_DIR", base / "manifests"),
+                patch.object(config, "MANIFEST_PATH", base / "manifests" / "documents.jsonl"),
+            ):
+                report = ingest_directory(inputs)
+                manifest = config.MANIFEST_PATH.read_text(encoding="utf-8")
+
+            self.assertEqual(report.discovered_files, 1)
+            self.assertNotIn("missing_source_url", report.results[0].review_flags)
+            self.assertNotIn("unknown_source_authority", report.results[0].review_flags)
+            self.assertIn("https://www.uscis.gov/example", manifest)
+            self.assertIn('"status":"current"', manifest)
+
 
 if __name__ == "__main__":
     unittest.main()
