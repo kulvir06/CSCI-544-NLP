@@ -368,6 +368,8 @@ def _best_temporal_claim(
     claims_by_passage: dict[str, list[TemporalClaim]],
     relevant_date: date,
 ) -> tuple[PassageTemporalStatus, Union[TemporalClaim, None]]:
+    if passage.temporal_scan_status != "completed":
+        return PassageTemporalStatus.INSUFFICIENT_EVIDENCE, None
     claims = claims_by_passage.get(passage.passage_id, [])
     if not claims:
         return PassageTemporalStatus.INSUFFICIENT_EVIDENCE, None

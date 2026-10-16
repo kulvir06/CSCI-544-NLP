@@ -220,6 +220,58 @@ def _embed_with_cache(
     return [vector for vector in vectors if vector is not None]
 
 
+def _build_semantic_passages(
+    work: list[tuple[StoredDocument, list[Passage], int, Passage]],
+    embeddings: list[list[float]],
+    routing: dict[str, tuple[bool, list[str], float]],
+    scan_status: dict[str, str],
+    embedding_model: str,
+) -> list[SemanticPassage]:
+    semantic_passages: list[SemanticPassage] = []
+    for item, embedding in zip(work, embeddings):
+        document, passages, index, passage = item
+        metadata = document.metadata
+        required, reasons, routing_confidence = routing[passage.passage_id]
+        semantic_passages.append(
+            SemanticPassage(
+                passage_id=passage.passage_id,
+                claim_id=passage.passage_id,
+                document_id=document.document_id,
+                text=passage.text,
+                block_index=passage.block_index,
+                previous_passage_id=(
+                    passages[index - 1].passage_id if index > 0 else None
+                ),
+                next_passage_id=(
+                    passages[index + 1].passage_id
+                    if index + 1 < len(passages) else None
+                ),
+                section=passage.section,
+                page_number=passage.page_number,
+                passage_relevance_score=passage.relevance_score,
+                title=metadata.title,
+                issuer=metadata.issuer,
+                source_url=metadata.source_url,
+                source_tier=document.source_tier,
+                document_status=metadata.status,
+                temporal_scan_required=required,
+                temporal_scan_status=scan_status[passage.passage_id],
+                temporal_routing_reasons=reasons,
+                temporal_routing_confidence=routing_confidence,
+                embedding_model=embedding_model,
+                embedding=embedding,
+            )
+        )
+    return semantic_passages
+
+
+def _write_semantic_index(passages: list[SemanticPassage]) -> None:
+    body = "\n".join(passage.model_dump_json() for passage in passages)
+    config.SEMANTIC_PASSAGE_INDEX_PATH.write_text(
+        f"{body}\n" if body else "", encoding="utf-8"
+    )
+
+
 def _analyze_passage(
     model: TemporalModel,
     item: tuple[StoredDocument, list[Passage], int, Passage],
@@ -297,6 +349,23 @@ def build_temporal_index(
             f"Temporal router selected {temporal_candidates} passages for Ollama "
             f"and skipped {total_passages - temporal_candidates}."
         )
+
+    # Build the complete semantic index before the slow generative stage. It is
+    # immediately useful for undated retrieval, while dated retrieval safely
+    # treats `pending` passages as temporally unverified.
+    passage_embeddings = _embed_with_cache(
+        model,
+        [item[3].text for item in work],
+        progress=progress,
+        label="passages",
+    )
+    semantic_passages = _build_semantic_passages(
+        work, passage_embeddings, routing, scan_status, model.embedding_model
+    )
+    _write_semantic_index(semantic_passages)
+    if progress:
+        progress(f"Semantic index written to {config.SEMANTIC_PASSAGE_INDEX_PATH}")
+
     effective_workers = min(workers, temporal_candidates) if temporal_candidates else 1
     if progress:
         label = "worker" if effective_workers == 1 else "parallel workers"
@@ -382,55 +451,15 @@ def build_temporal_index(
         document, passage, context, accepted = results[position]
         pending.extend((document, passage, context, claim) for claim in accepted)
 
-    passage_embeddings = _embed_with_cache(
-        model,
-        [item[3].text for item in work],
-        progress=progress,
-        label="passages",
+    semantic_passages = _build_semantic_passages(
+        work, passage_embeddings, routing, scan_status, model.embedding_model
     )
-    semantic_passages: list[SemanticPassage] = []
-    for item, embedding in zip(work, passage_embeddings):
-        document, passages, index, passage = item
-        metadata = document.metadata
-        required, reasons, routing_confidence = routing[passage.passage_id]
-        semantic_passages.append(
-            SemanticPassage(
-                passage_id=passage.passage_id,
-                claim_id=passage.passage_id,
-                document_id=document.document_id,
-                text=passage.text,
-                block_index=passage.block_index,
-                previous_passage_id=(
-                    passages[index - 1].passage_id if index > 0 else None
-                ),
-                next_passage_id=(
-                    passages[index + 1].passage_id
-                    if index + 1 < len(passages) else None
-                ),
-                section=passage.section,
-                page_number=passage.page_number,
-                passage_relevance_score=passage.relevance_score,
-                title=metadata.title,
-                issuer=metadata.issuer,
-                source_url=metadata.source_url,
-                source_tier=document.source_tier,
-                document_status=metadata.status,
-                temporal_scan_required=required,
-                temporal_scan_status=scan_status[passage.passage_id],
-                temporal_routing_reasons=reasons,
-                temporal_routing_confidence=routing_confidence,
-                embedding_model=model.embedding_model,
-                embedding=embedding,
-            )
-        )
-    semantic_body = "\n".join(
-        passage.model_dump_json() for passage in semantic_passages
-    )
-    config.SEMANTIC_PASSAGE_INDEX_PATH.write_text(
-        f"{semantic_body}\n" if semantic_body else "", encoding="utf-8"
-    )
+    _write_semantic_index(semantic_passages)
     if progress:
-        progress(f"Semantic index written to {config.SEMANTIC_PASSAGE_INDEX_PATH}")
+        progress(
+            f"Semantic index scan statuses updated in "
+            f"{config.SEMANTIC_PASSAGE_INDEX_PATH}"
+        )
 
     embeddings = _embed_with_cache(
         model,
