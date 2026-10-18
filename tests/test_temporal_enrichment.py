@@ -144,7 +144,57 @@ class TemporalEnrichmentTests(unittest.TestCase):
             document_ids={result.document.document_id},
             progress=messages.append,
         )
-        self.assertIn("Done via cache", "\n".join(messages))
+        second_run = "\n".join(messages)
+        self.assertIn("Resume scan: 1/1 passages already complete", second_run)
+        self.assertIn("No model requests needed", second_run)
+        self.assertNotIn("Analyzing", second_run)
+
+    def test_resume_counter_starts_after_completed_cache_entries(self):
+        result = ingest_upload(
+            "rule.txt",
+            b"The final rule provides a 24 month STEM OPT extension.",
+            DocumentMetadata(original_filename="rule.txt"),
+        )
+        passages = [
+            Passage(
+                passage_id=f"{result.document.document_id}-p{number:05d}",
+                document_id=result.document.document_id,
+                text=(
+                    "The previous STEM OPT rule provided a 17 month extension. "
+                    "The final rule provides a 24 month STEM OPT extension."
+                ),
+                block_index=number,
+                relevance_score=5.0,
+                selection_reasons=["rule:quantity"],
+            )
+            for number in (1, 2)
+        ]
+
+        with patch("temporal.enrichment._load_passages", return_value=passages):
+            build_temporal_index(
+                FakeTemporalModel(),
+                document_ids={result.document.document_id},
+                max_passages=1,
+            )
+
+        messages: list[str] = []
+        model = FakeTemporalModel()
+        with (
+            patch("temporal.enrichment._load_passages", return_value=passages),
+            patch.object(model, "extract_claims", wraps=model.extract_claims) as extraction,
+        ):
+            report = build_temporal_index(
+                model,
+                document_ids={result.document.document_id},
+                progress=messages.append,
+            )
+
+        output = "\n".join(messages)
+        extraction.assert_called_once()
+        self.assertEqual(report.source_passages, 2)
+        self.assertIn("Resume scan: 1/2 passages already complete", output)
+        self.assertIn(f"[2/2] Analyzing {passages[1].passage_id}", output)
+        self.assertNotIn(f"Analyzing {passages[0].passage_id}", output)
 
     def test_parallel_workers_preserve_passage_order(self):
         result = ingest_upload(

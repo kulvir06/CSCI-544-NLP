@@ -68,8 +68,10 @@ python3 -m scripts.build_temporal_index \
 The second command first embeds every passage in inexpensive batches, then sends
 only automatically routed passages through the generative temporal model. Both
 embeddings and valid model responses are cached, so pressing `Ctrl+C` is safe:
-rerun the same command later and completed work will be loaded from cache. The
-default is two concurrent requests. Ollama must also be configured
+rerun the same command later and a startup resume scan skips completed passages
+before any workers are launched. Progress therefore begins at the first passage
+that still needs model work instead of replaying counters from 1. The default is
+two concurrent requests. Ollama must also be configured
 with `OLLAMA_NUM_PARALLEL=2` to execute them concurrently rather than queue them.
 On a 16 GB machine, start with two workers; additional workers can exhaust memory
 and reduce performance.

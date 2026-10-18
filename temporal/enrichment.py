@@ -161,6 +161,47 @@ def _needs_fallback(extraction: ClaimExtraction, passage: Passage) -> bool:
     return False
 
 
+def _load_completed_cached_cascade(
+    primary_model: TemporalModel,
+    fallback_model: Optional[TemporalModel],
+    passage: Passage,
+) -> tuple[ClaimExtraction, str, str] | None:
+    """Return a terminal cached result without making a model request.
+
+    A fallback result is terminal. A primary result is terminal only when it
+    passes the cascade's confidence checks (or no fallback is configured).
+    Low-confidence primary-only results remain pending so resuming never trades
+    reliability for speed.
+    """
+
+    def load(model_name: str) -> ClaimExtraction | None:
+        path = _cache_path(passage, model_name)
+        if not path.exists():
+            return None
+        try:
+            return ClaimExtraction.model_validate_json(
+                path.read_text(encoding="utf-8")
+            )
+        except (OSError, ValueError):
+            return None
+
+    if fallback_model is not None:
+        fallback_result = load(fallback_model.temporal_model)
+        if fallback_result is not None:
+            return (
+                fallback_result,
+                fallback_model.temporal_model,
+                "final_fallback_cache",
+            )
+
+    primary_result = load(primary_model.temporal_model)
+    if primary_result is None:
+        return None
+    if fallback_model is not None and _needs_fallback(primary_result, passage):
+        return None
+    return primary_result, primary_model.temporal_model, "final_primary_cache"
+
+
 def _extract_with_cascade(
     primary_model: TemporalModel,
     fallback_model: Optional[TemporalModel],
@@ -447,6 +488,42 @@ def build_temporal_index(
         for item in work
     }
 
+    # Resume directly from the next unfinished passage. Completed cascade
+    # outputs are loaded once into the result set and never submitted to the
+    # worker pool again.
+    results: dict[
+        int, tuple[StoredDocument, Passage, str, list[ExtractedClaim], str]
+    ] = {}
+    unfinished_candidate_work: list[
+        tuple[int, tuple[StoredDocument, list[Passage], int, Passage]]
+    ] = []
+    for position, item in candidate_work:
+        document, passages, index, passage = item
+        cached = _load_completed_cached_cascade(model, fallback_model, passage)
+        if cached is None:
+            unfinished_candidate_work.append((position, item))
+            continue
+        extraction, extraction_model, _ = cached
+        accepted = [
+            claim for claim in extraction.claims if _valid_claim(claim, passage)
+        ]
+        if accepted:
+            scan_status[passage.passage_id] = "completed"
+        else:
+            scan_status[passage.passage_id] = "analyzed_no_claim"
+            skipped_passages += 1
+        results[position] = (
+            document,
+            passage,
+            _context(passages, index),
+            accepted,
+            extraction_model,
+        )
+
+    candidate_work = unfinished_candidate_work
+    cached_candidates = len(results)
+    remaining_candidates = len(candidate_work)
+
     started_at = time.monotonic()
     if progress:
         progress(
@@ -461,6 +538,10 @@ def build_temporal_index(
                 f"Model cascade: {model.temporal_model} primary -> "
                 f"{fallback_model.temporal_model} fallback."
             )
+        progress(
+            f"Resume scan: {cached_candidates}/{temporal_candidates} passages "
+            f"already complete; {remaining_candidates} passage(s) need model work."
+        )
 
     # Build the complete semantic index before the slow generative stage. It is
     # immediately useful for undated retrieval, while dated retrieval safely
@@ -478,16 +559,15 @@ def build_temporal_index(
     if progress:
         progress(f"Semantic index written to {config.SEMANTIC_PASSAGE_INDEX_PATH}")
 
-    effective_workers = min(workers, temporal_candidates) if temporal_candidates else 1
-    if progress:
+    effective_workers = min(workers, remaining_candidates) if remaining_candidates else 1
+    if progress and remaining_candidates:
         label = "worker" if effective_workers == 1 else "parallel workers"
         progress(f"Using {effective_workers} {label}.")
+    elif progress:
+        progress("No model requests needed; all routed passages are complete in cache.")
 
     # Keep only `effective_workers` tasks in flight. This bounds memory usage,
     # makes Ctrl+C responsive, and avoids flooding Ollama's request queue.
-    results: dict[
-        int, tuple[StoredDocument, Passage, str, list[ExtractedClaim], str]
-    ] = {}
     executor = ThreadPoolExecutor(
         max_workers=effective_workers,
         thread_name_prefix="temporal-extraction",
@@ -500,13 +580,13 @@ def build_temporal_index(
 
     def submit_next() -> None:
         nonlocal next_offset
-        if next_offset >= temporal_candidates:
+        if next_offset >= remaining_candidates:
             return
         position, item = candidate_work[next_offset]
         document, _, _, passage = item
         if progress:
             progress(
-                f"[{next_offset + 1}/{temporal_candidates}] "
+                f"[{cached_candidates + next_offset + 1}/{temporal_candidates}] "
                 f"Analyzing {passage.passage_id} ..."
             )
         future = executor.submit(_analyze_passage, model, fallback_model, item)
