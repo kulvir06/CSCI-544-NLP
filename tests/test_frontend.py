@@ -21,6 +21,7 @@ class FrontendTests(unittest.TestCase):
         self.assertIn("/static", route_paths)
         self.assertIn("/styles.css", route_paths)
         self.assertIn("/app.js", route_paths)
+        self.assertNotIn("/query/", route_paths)
 
     def test_root_redirects_to_dashboard(self):
         response = root()

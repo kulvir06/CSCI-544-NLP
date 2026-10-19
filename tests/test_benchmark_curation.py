@@ -26,6 +26,13 @@ class BenchmarkCurationTests(unittest.TestCase):
         self.patch_stack.enter_context(
             patch.object(config, "RETRIEVAL_INDEX_PATH", self.index_path)
         )
+        self.patch_stack.enter_context(
+            patch.object(
+                config,
+                "SEMANTIC_PASSAGE_INDEX_PATH",
+                self.base / "index" / "semantic_passages.jsonl",
+            )
+        )
         self.index_path.parent.mkdir(parents=True)
         passage = IndexedPassage(
             passage_id="doc-1-p0001",

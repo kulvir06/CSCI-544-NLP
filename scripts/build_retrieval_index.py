@@ -1,10 +1,6 @@
-"""Build the local passage index from approved document reviews."""
+"""Backward-compatible entry point for automatic temporal index construction."""
 
-from retrieval.index import build_index
-
-
-def main() -> None:
-    print(build_index().model_dump_json(indent=2))
+from scripts.build_temporal_index import main
 
 
 if __name__ == "__main__":

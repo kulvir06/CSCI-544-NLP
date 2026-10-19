@@ -1,6 +1,8 @@
 node_modules
 local-setup-guide.md
 *.pdf
+vector/data/document-corpus/*.html
+corpus_documents/f1-employment-and-extensions/*.html
 rules.txt
 help.md
 chromadb
@@ -13,6 +15,8 @@ __pycache__/
 data/raw/*
 data/normalized/*
 data/passages/*
+data/temporal_cache/*
+data/embedding_cache/*
 data/reports/*
 data/reviews/*
 data/index/*
@@ -20,6 +24,8 @@ data/manifests/documents.jsonl
 !data/raw/.gitkeep
 !data/normalized/.gitkeep
 !data/passages/.gitkeep
+!data/temporal_cache/.gitkeep
+!data/embedding_cache/.gitkeep
 !data/reports/.gitkeep
 !data/reviews/.gitkeep
 !data/index/.gitkeep
