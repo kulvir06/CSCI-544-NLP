@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import math
 
 from evaluation.schema import (
     CaseEvaluationResult,
@@ -15,6 +16,7 @@ from evaluation.schema import (
     SystemMetrics,
 )
 from retrieval.schema import TemporalVerdict
+from retrieval.search import verify_source_temporality
 from verification.meaning import verify_meaning
 from verification.safety import verify_safety
 from verification.schema import (
@@ -41,29 +43,46 @@ def _meaning_prediction(verdict: MeaningVerdict) -> SafetyVerdict:
     return SafetyVerdict.ABSTAIN
 
 
-def _temporal_prediction(case: EvaluationCase) -> SafetyVerdict:
+def _temporal_prediction(
+    case: EvaluationCase, temporal_verdict: TemporalVerdict
+) -> SafetyVerdict:
     if not case.temporal_verification_required:
         return SafetyVerdict.SAFE
-    if case.observed_temporal_verdict == TemporalVerdict.VERIFIED_APPLICABLE:
+    if temporal_verdict == TemporalVerdict.VERIFIED_APPLICABLE:
         return SafetyVerdict.SAFE
-    if case.observed_temporal_verdict == TemporalVerdict.INSUFFICIENT_TEMPORAL_EVIDENCE:
+    if temporal_verdict == TemporalVerdict.INSUFFICIENT_TEMPORAL_EVIDENCE:
         return SafetyVerdict.ABSTAIN
     return SafetyVerdict.UNSAFE
 
 
+def _temporal_verdict(case: EvaluationCase) -> tuple[TemporalVerdict, str | None]:
+    if not case.automatic_temporal_verification:
+        return case.observed_temporal_verdict, None
+    if not case.passage_id or not case.relevant_date:
+        return TemporalVerdict.INSUFFICIENT_TEMPORAL_EVIDENCE, None
+    return verify_source_temporality(
+        case.passage_id,
+        case.source_text,
+        case.relevant_date,
+    )
+
+
 def evaluate_case(case: EvaluationCase) -> CaseEvaluationResult:
+    temporal_verdict, matched_claim_id = _temporal_verdict(case)
     meaning = verify_meaning(
         MeaningVerificationRequest(
             source_text=case.source_text,
             explanation=case.explanation,
+            critical_facts=case.atomic_fact_checklist,
         )
     )
     combined = verify_safety(
         SafetyVerificationRequest(
             source_text=case.source_text,
             explanation=case.explanation,
-            temporal_verdict=case.observed_temporal_verdict,
+            temporal_verdict=temporal_verdict,
             temporal_verification_required=case.temporal_verification_required,
+            critical_facts=case.atomic_fact_checklist,
         )
     )
     return CaseEvaluationResult(
@@ -72,9 +91,14 @@ def evaluate_case(case: EvaluationCase) -> CaseEvaluationResult:
         gold_label=case.gold_label,
         meaning_verdict=meaning.verdict,
         critical_fact_preservation=meaning.critical_fact_preservation,
+        observed_temporal_verdict=temporal_verdict,
+        expected_temporal_verdict=case.expected_temporal_verdict,
+        matched_temporal_claim_id=matched_claim_id,
         predictions={
             SystemConfiguration.STATIC_BASELINE: SafetyVerdict.SAFE,
-            SystemConfiguration.TEMPORAL_ONLY: _temporal_prediction(case),
+            SystemConfiguration.TEMPORAL_ONLY: _temporal_prediction(
+                case, temporal_verdict
+            ),
             SystemConfiguration.MEANING_ONLY: _meaning_prediction(meaning.verdict),
             SystemConfiguration.COMBINED: combined.verdict,
         },
@@ -124,16 +148,41 @@ def _metrics_for_system(
             ),
         )
 
+    def wilson(successes: int, sample_size: int) -> tuple[float, float]:
+        if sample_size == 0:
+            return (0.0, 0.0)
+        z = 1.959963984540054
+        proportion = successes / sample_size
+        denominator = 1 + z * z / sample_size
+        center = (proportion + z * z / (2 * sample_size)) / denominator
+        margin = (
+            z
+            * math.sqrt(
+                proportion * (1 - proportion) / sample_size
+                + z * z / (4 * sample_size * sample_size)
+            )
+            / denominator
+        )
+        return (round(max(0.0, center - margin), 4), round(min(1.0, center + margin), 4))
+
     return SystemMetrics(
         total_cases=total,
+        unsafe_cases=len(unsafe_cases),
+        safe_cases=len(safe_cases),
+        false_safe_count=false_safe,
+        unsafe_detected_count=unsafe_detected,
+        safe_accepted_count=safe_accepted,
+        abstained_count=abstained,
         exact_accuracy=round(exact / total, 4) if total else 0.0,
         false_safe_rate=round(false_safe / len(unsafe_cases), 4) if unsafe_cases else 0.0,
+        false_safe_wilson_95=wilson(false_safe, len(unsafe_cases)),
         unsafe_detection_rate=(
             round(unsafe_detected / len(unsafe_cases), 4) if unsafe_cases else 0.0
         ),
         safe_acceptance_rate=(
             round(safe_accepted / len(safe_cases), 4) if safe_cases else 0.0
         ),
+        safe_acceptance_wilson_95=wilson(safe_accepted, len(safe_cases)),
         abstention_rate=round(abstained / total, 4) if total else 0.0,
         per_error=grouped,
     )
@@ -141,27 +190,32 @@ def _metrics_for_system(
 
 def run_evaluation(cases: list[EvaluationCase]) -> EvaluationReport:
     results = [evaluate_case(case) for case in cases]
-    temporal_cases = [case for case in cases if case.temporal_verification_required]
+    temporal_results = [
+        result
+        for case, result in zip(cases, results)
+        if case.temporal_verification_required
+    ]
     temporal_correct = sum(
-        case.observed_temporal_verdict == case.expected_temporal_verdict
-        for case in temporal_cases
+        result.observed_temporal_verdict == result.expected_temporal_verdict
+        for result in temporal_results
     )
     mean_preservation = (
         sum(result.critical_fact_preservation for result in results) / len(results)
         if results
         else 0.0
     )
-    dataset_status = (
-        "development_fixtures"
-        if any(case.development_fixture for case in cases)
-        else "reviewed_benchmark"
-    )
+    if not any(case.development_fixture for case in cases):
+        dataset_status = "reviewed_benchmark"
+    elif any(case.automatic_temporal_verification for case in cases):
+        dataset_status = "benchmark_candidates"
+    else:
+        dataset_status = "development_fixtures"
     return EvaluationReport(
         dataset_status=dataset_status,
         total_cases=len(cases),
         temporal_verdict_accuracy=(
-            round(temporal_correct / len(temporal_cases), 4)
-            if temporal_cases
+            round(temporal_correct / len(temporal_results), 4)
+            if temporal_results
             else 0.0
         ),
         mean_critical_fact_preservation=round(mean_preservation, 4),
@@ -184,4 +238,3 @@ def run_file(input_path: Path, output_path: Path) -> EvaluationReport:
     report = run_evaluation(load_cases(input_path))
     save_report(report, output_path)
     return report
-

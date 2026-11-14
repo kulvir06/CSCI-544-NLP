@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
+from datetime import date, datetime
 import hashlib
 import json
 from pathlib import Path
@@ -11,7 +12,7 @@ import time
 from typing import Callable, Optional, Protocol
 
 from api import config
-from corpus.schema import Passage, StoredDocument
+from corpus.schema import DocumentStatus, Passage, StoredDocument
 from corpus.storage import ensure_data_directories
 from temporal.schema import (
     ClaimExtraction,
@@ -41,6 +42,26 @@ SUBSTANTIVE_RULE_REASONS = {
     "rule:exception",
     "rule:form",
 }
+MONTH_NAME = (
+    r"January|February|March|April|May|June|July|August|September|"
+    r"October|November|December"
+)
+SOURCE_DATE_PATTERN = rf"(?:{MONTH_NAME})\s+\d{{1,2}},\s+\d{{4}}"
+RULE_EFFECTIVE_PATTERN = re.compile(
+    rf"(?:DATES:\s*)?This\s+(?:interim\s+final\s+|final\s+)?rule\s+is\s+"
+    rf"effective(?:\s+beginning|\s+on)?\s+(?P<date>{SOURCE_DATE_PATTERN})",
+    re.IGNORECASE,
+)
+LEGACY_STEM_END_PATTERN = re.compile(
+    rf"17-month\s+STEM\s+OPT\s+regulations\s+remain\s+in\s+force\s+through\s+"
+    rf"(?P<date>{SOURCE_DATE_PATTERN})",
+    re.IGNORECASE,
+)
+LEGACY_STEM_CLAIM_PATTERN = re.compile(
+    r"\b17\s*[- ]?month\b.{0,180}\b(?:STEM|OPT|extension)\b|"
+    r"\b(?:STEM|OPT|extension)\b.{0,180}\b17\s*[- ]?month\b",
+    re.IGNORECASE,
+)
 
 
 class TemporalModel(Protocol):
@@ -50,6 +71,77 @@ class TemporalModel(Protocol):
     def extract_claims(self, prompt: str) -> ClaimExtraction: ...
 
     def embed(self, texts: list[str]) -> list[list[float]]: ...
+
+
+def _parse_source_date(value: str) -> date:
+    return datetime.strptime(value.title(), "%B %d, %Y").date()
+
+
+def _source_temporal_anchors(
+    documents: dict[str, StoredDocument],
+) -> tuple[dict[str, tuple[date, str]], tuple[date, str] | None]:
+    """Extract explicit effective/supersession anchors from uploaded source text."""
+    effective: dict[str, tuple[date, str]] = {}
+    legacy_stem_end: tuple[date, str] | None = None
+    for document_id in documents:
+        path = config.NORMALIZED_DOCUMENT_DIR / f"{document_id}.txt"
+        if not path.exists():
+            continue
+        text = " ".join(path.read_text(encoding="utf-8", errors="ignore").split())
+        match = RULE_EFFECTIVE_PATTERN.search(text)
+        if match:
+            effective[document_id] = (
+                _parse_source_date(match.group("date")),
+                match.group(0),
+            )
+        legacy_match = LEGACY_STEM_END_PATTERN.search(text)
+        if legacy_match:
+            legacy_stem_end = (
+                _parse_source_date(legacy_match.group("date")),
+                legacy_match.group(0),
+            )
+    return effective, legacy_stem_end
+
+
+def _apply_source_anchors(
+    document: StoredDocument,
+    extracted: ExtractedClaim,
+    effective_anchors: dict[str, tuple[date, str]],
+    legacy_stem_end: tuple[date, str] | None,
+) -> tuple[TemporalRole, date | None, date | None, str]:
+    """Ground a passage claim in explicit date language found in source files."""
+    role = extracted.temporal_role
+    valid_from = extracted.valid_from
+    valid_to = extracted.valid_to
+    basis_parts = [extracted.date_basis]
+
+    title = document.metadata.title or ""
+    if (
+        document.metadata.status == DocumentStatus.PROPOSED
+        and "proposed rule" in title.casefold()
+        and role == TemporalRole.OPERATIVE
+    ):
+        role = TemporalRole.PROPOSED
+        valid_from = None
+        valid_to = None
+        basis_parts.append("Source document is explicitly titled Proposed Rule.")
+
+    anchor = effective_anchors.get(document.document_id)
+    if role == TemporalRole.OPERATIVE and not valid_from and anchor:
+        valid_from = anchor[0]
+        basis_parts.append(f"Source effective-date anchor: {anchor[1]}")
+
+    if (
+        role == TemporalRole.OPERATIVE
+        and legacy_stem_end
+        and LEGACY_STEM_CLAIM_PATTERN.search(extracted.claim_text)
+    ):
+        valid_to = legacy_stem_end[0]
+        basis_parts.append(f"Source supersession anchor: {legacy_stem_end[1]}")
+
+    if valid_to and not valid_from:
+        valid_to = None
+    return role, valid_from, valid_to, " | ".join(dict.fromkeys(basis_parts))
 
 
 def _load_passages(document_id: str) -> list[Passage]:
@@ -96,6 +188,9 @@ Automatically inferred document context (may be incomplete; do not treat it as v
 - title: {metadata.title or 'unknown'}
 - issuer: {metadata.issuer or 'unknown'}
 - publication date: {metadata.published_at or 'unknown'}
+- document status: {metadata.status.value}
+- catalog date evidence: {metadata.date_evidence or 'none'}
+- effective-date candidates detected elsewhere in this document: {', '.join(candidates.effective_date_candidates) or 'none'}
 - dates detected elsewhere in the document: {', '.join(candidates.date_mentions) or 'none'}
 - section: {passage.section or 'unknown'}
 
@@ -108,6 +203,10 @@ Tasks:
 4. Infer valid_from and valid_to only when the supplied text and context support them. Normalize supported dates as YYYY-MM-DD. Never use today's date and never guess a missing boundary.
 5. In date_basis, state what wording supports the interval or why it is unknown.
 6. Confidence measures confidence in both the role and interval. Use low confidence when either is ambiguous.
+
+Document-date guidance:
+- A date explicitly labeled as the final rule's effective date in the supplied document context may support valid_from for operative regulatory text from that final rule.
+- A recurring program cutoff such as "until April 1 of the fiscal year" is part of the claim's rule, not the date on which the regulation itself stops being valid. Do not store such a cutoff as valid_to.
 
 Important distinctions:
 - A document can be currently valid while a sentence inside it describes an old rule.
@@ -439,6 +538,7 @@ def build_temporal_index(
     model: TemporalModel,
     fallback_model: Optional[TemporalModel] = None,
     document_ids: set[str] | None = None,
+    passage_ids: set[str] | None = None,
     max_passages: int | None = None,
     workers: int = 1,
     progress: Callable[[str], None] | None = None,
@@ -452,6 +552,7 @@ def build_temporal_index(
         documents = {
             key: value for key, value in documents.items() if key in document_ids
         }
+    effective_anchors, legacy_stem_end = _source_temporal_anchors(documents)
 
     work: list[tuple[StoredDocument, list[Passage], int, Passage]] = []
     for document in documents.values():
@@ -462,6 +563,15 @@ def build_temporal_index(
                 break
         if max_passages is not None and len(work) >= max_passages:
             break
+
+    if passage_ids is not None:
+        available_passage_ids = {item[3].passage_id for item in work}
+        missing_passage_ids = passage_ids - available_passage_ids
+        if missing_passage_ids:
+            raise ValueError(
+                "Unknown targeted passage ID(s): "
+                + ", ".join(sorted(missing_passage_ids))
+            )
 
     pending: list[tuple[StoredDocument, Passage, str, ExtractedClaim, str]] = []
     source_passages = len(work)
@@ -476,6 +586,20 @@ def build_temporal_index(
     for position, item in enumerate(work, start=1):
         _, passages, index, passage = item
         decision = classify_temporal_route(passages, index)
+        if passage_ids is not None and passage.passage_id in passage_ids:
+            required, reasons, confidence = decision
+            decision = (
+                True,
+                list(dict.fromkeys([*reasons, "explicit_target"])),
+                max(confidence, 1.0),
+            )
+        elif not decision[0] and _load_completed_cached_cascade(
+            model, fallback_model, passage
+        ) is not None:
+            # Explicitly targeted passages may have been outside the original
+            # router. Once analyzed, their cached temporal claims must remain
+            # part of every later full index rebuild.
+            decision = (True, ["cached_temporal_analysis"], 1.0)
         routing[passage.passage_id] = decision
         if decision[0]:
             candidate_work.append((position, item))
@@ -501,7 +625,8 @@ def build_temporal_index(
         document, passages, index, passage = item
         cached = _load_completed_cached_cascade(model, fallback_model, passage)
         if cached is None:
-            unfinished_candidate_work.append((position, item))
+            if passage_ids is None or passage.passage_id in passage_ids:
+                unfinished_candidate_work.append((position, item))
             continue
         extraction, extraction_model, _ = cached
         accepted = [
@@ -523,6 +648,7 @@ def build_temporal_index(
     candidate_work = unfinished_candidate_work
     cached_candidates = len(results)
     remaining_candidates = len(candidate_work)
+    deferred_candidates = temporal_candidates - cached_candidates - remaining_candidates
 
     started_at = time.monotonic()
     if progress:
@@ -542,6 +668,11 @@ def build_temporal_index(
             f"Resume scan: {cached_candidates}/{temporal_candidates} passages "
             f"already complete; {remaining_candidates} passage(s) need model work."
         )
+        if passage_ids is not None:
+            progress(
+                f"Targeted run: {len(passage_ids)} requested passage(s); "
+                f"{deferred_candidates} unrelated uncached routed passage(s) deferred."
+            )
 
     # Build the complete semantic index before the slow generative stage. It is
     # immediately useful for undated retrieval, while dated retrieval safely
@@ -683,6 +814,12 @@ def build_temporal_index(
         zip(pending, embeddings), start=1
     ):
         metadata = document.metadata
+        temporal_role, valid_from, valid_to, date_basis = _apply_source_anchors(
+            document,
+            extracted,
+            effective_anchors,
+            legacy_stem_end,
+        )
         claim_digest = hashlib.sha256(
             f"{passage.passage_id}\0{extracted.claim_text}".encode("utf-8")
         ).hexdigest()[:12]
@@ -702,10 +839,10 @@ def build_temporal_index(
                 source_url=metadata.source_url,
                 source_tier=document.source_tier,
                 document_status=metadata.status,
-                temporal_role=extracted.temporal_role,
-                valid_from=extracted.valid_from,
-                valid_to=extracted.valid_to,
-                date_basis=extracted.date_basis,
+                temporal_role=temporal_role,
+                valid_from=valid_from,
+                valid_to=valid_to,
+                date_basis=date_basis,
                 temporal_confidence=extracted.confidence,
                 extraction_model=extraction_model,
                 embedding_model=model.embedding_model,
@@ -748,10 +885,21 @@ def document_ids_for_directory(input_directory: Path) -> set[str]:
 
 
 def load_temporal_claims() -> list[TemporalClaim]:
-    if not config.RETRIEVAL_INDEX_PATH.exists():
+    from temporal.linking import linked_index_is_current
+
+    linked_path = config.INDEX_DIR / "linked_temporal_claims.jsonl"
+    linked_metadata_path = config.INDEX_DIR / "linked_temporal_claims.meta.json"
+    source_path = (
+        linked_path
+        if linked_index_is_current(
+            config.RETRIEVAL_INDEX_PATH, linked_path, linked_metadata_path
+        )
+        else config.RETRIEVAL_INDEX_PATH
+    )
+    if not source_path.exists():
         return []
     claims: list[TemporalClaim] = []
-    for line in config.RETRIEVAL_INDEX_PATH.read_text(encoding="utf-8").splitlines():
+    for line in source_path.read_text(encoding="utf-8").splitlines():
         if not line.strip():
             continue
         payload = json.loads(line)

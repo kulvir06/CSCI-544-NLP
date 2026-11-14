@@ -11,6 +11,8 @@ from corpus.schema import DocumentMetadata, DocumentStatus, Passage, SourceTier
 from retrieval.schema import RetrievalRequest, TemporalVerdict
 from retrieval.search import retrieve
 from temporal.enrichment import (
+    _apply_source_anchors,
+    _source_temporal_anchors,
     build_temporal_index,
     load_semantic_passages,
     load_temporal_claims,
@@ -21,6 +23,7 @@ from temporal.schema import (
     TemporalClaim,
     TemporalRole,
 )
+from temporal.ollama import OllamaClient
 
 
 class FakeTemporalModel:
@@ -119,6 +122,64 @@ class TemporalEnrichmentTests(unittest.TestCase):
         self.assertEqual(claims[0].source_passage_id, claims[1].source_passage_id)
         self.assertEqual(claims[0].temporal_role, TemporalRole.HISTORICAL)
         self.assertEqual(claims[1].temporal_role, TemporalRole.OPERATIVE)
+
+    def test_full_source_effective_header_is_linked_to_passage_claim(self):
+        result = ingest_upload(
+            "final-rule.txt",
+            (
+                "DATES: This final rule is effective May 10, 2016.\n\n"
+                "The final rule provides a 24 month STEM OPT extension."
+            ).encode("utf-8"),
+            DocumentMetadata(
+                original_filename="final-rule.txt",
+                title="STEM OPT Final Rule",
+                status=DocumentStatus.HISTORICAL,
+            ),
+        )
+        anchors, legacy_end = _source_temporal_anchors(
+            {result.document.document_id: result.document}
+        )
+        extracted = ExtractedClaim(
+            claim_text="The rule provides a 24 month STEM OPT extension.",
+            evidence_quote="The final rule provides a 24 month STEM OPT extension.",
+            temporal_role=TemporalRole.OPERATIVE,
+            date_basis="No date in the selected passage.",
+            confidence=0.9,
+        )
+
+        role, valid_from, valid_to, basis = _apply_source_anchors(
+            result.document, extracted, anchors, legacy_end
+        )
+
+        self.assertEqual(role, TemporalRole.OPERATIVE)
+        self.assertEqual(valid_from, date(2016, 5, 10))
+        self.assertIsNone(valid_to)
+        self.assertIn("Source effective-date anchor", basis)
+
+    def test_proposed_document_cannot_be_promoted_to_operative(self):
+        result = ingest_upload(
+            "proposal.txt",
+            b"The proposal provides a 24 month STEM OPT extension.",
+            DocumentMetadata(
+                original_filename="proposal.txt",
+                title="STEM OPT Proposed Rule",
+                status=DocumentStatus.PROPOSED,
+            ),
+        )
+        extracted = ExtractedClaim(
+            claim_text="The rule provides a 24 month STEM OPT extension.",
+            evidence_quote="The proposal provides a 24 month STEM OPT extension.",
+            temporal_role=TemporalRole.OPERATIVE,
+            date_basis="No date.",
+            confidence=0.9,
+        )
+        role, valid_from, valid_to, basis = _apply_source_anchors(
+            result.document, extracted, {}, None
+        )
+        self.assertEqual(role, TemporalRole.PROPOSED)
+        self.assertIsNone(valid_from)
+        self.assertIsNone(valid_to)
+        self.assertIn("Proposed Rule", basis)
 
     def test_build_reports_live_progress_and_cache_reuse(self):
         result = ingest_upload(
@@ -235,6 +296,114 @@ class TemporalEnrichmentTests(unittest.TestCase):
         semantic = load_semantic_passages()
         self.assertEqual(semantic[0].next_passage_id, passages[1].passage_id)
         self.assertEqual(semantic[1].previous_passage_id, passages[0].passage_id)
+
+    def test_targeted_run_forces_selected_passage_and_defers_other_work(self):
+        result = ingest_upload(
+            "rule.txt",
+            b"The final rule provides a 24 month STEM OPT extension.",
+            DocumentMetadata(original_filename="rule.txt"),
+        )
+        text = (
+            "The previous STEM OPT rule provided a 17 month extension. "
+            "The final rule provides a 24 month STEM OPT extension."
+        )
+        passages = [
+            Passage(
+                passage_id=f"{result.document.document_id}-p00001",
+                document_id=result.document.document_id,
+                text=text,
+                block_index=1,
+                relevance_score=5.0,
+                selection_reasons=["rule:quantity"],
+            ),
+            Passage(
+                passage_id=f"{result.document.document_id}-p00002",
+                document_id=result.document.document_id,
+                text=text,
+                block_index=2,
+                relevance_score=5.0,
+                selection_reasons=[],
+            ),
+        ]
+        model = FakeTemporalModel()
+        messages: list[str] = []
+        with (
+            patch("temporal.enrichment._load_passages", return_value=passages),
+            patch.object(model, "extract_claims", wraps=model.extract_claims) as extraction,
+        ):
+            report = build_temporal_index(
+                model,
+                document_ids={result.document.document_id},
+                passage_ids={passages[1].passage_id},
+                progress=messages.append,
+            )
+
+        extraction.assert_called_once()
+        self.assertEqual(report.temporal_candidates, 2)
+        self.assertEqual(report.indexed_claims, 2)
+        semantic = {item.passage_id: item for item in load_semantic_passages()}
+        self.assertEqual(
+            semantic[passages[0].passage_id].temporal_scan_status, "pending"
+        )
+        self.assertEqual(
+            semantic[passages[1].passage_id].temporal_scan_status, "completed"
+        )
+        self.assertIn(
+            "explicit_target",
+            semantic[passages[1].passage_id].temporal_routing_reasons,
+        )
+        self.assertIn("1 unrelated uncached routed passage(s) deferred", "\n".join(messages))
+
+        with patch("temporal.enrichment._load_passages", return_value=passages):
+            second_report = build_temporal_index(
+                model,
+                document_ids={result.document.document_id},
+                passage_ids={passages[0].passage_id},
+            )
+        rebuilt_semantic = {
+            item.passage_id: item for item in load_semantic_passages()
+        }
+        self.assertEqual(second_report.indexed_claims, 4)
+        self.assertEqual(
+            rebuilt_semantic[passages[1].passage_id].temporal_scan_status,
+            "completed",
+        )
+        self.assertIn(
+            "cached_temporal_analysis",
+            rebuilt_semantic[passages[1].passage_id].temporal_routing_reasons,
+        )
+
+    def test_targeted_run_rejects_unknown_passage_id(self):
+        result = ingest_upload(
+            "rule.txt",
+            b"The final rule provides a 24 month STEM OPT extension.",
+            DocumentMetadata(original_filename="rule.txt"),
+        )
+        with self.assertRaisesRegex(ValueError, "Unknown targeted passage ID"):
+            build_temporal_index(
+                FakeTemporalModel(),
+                document_ids={result.document.document_id},
+                passage_ids={"missing-passage"},
+            )
+
+    def test_ollama_repairs_percentage_confidence_and_end_only_interval(self):
+        client = OllamaClient()
+        response = {
+            "message": {
+                "content": (
+                    '{"claims":[{"claim_text":"Cap-gap protection extends '
+                    'until April 1.","evidence_quote":"Cap-gap protection '
+                    'extends until April 1.","temporal_role":"operative",'
+                    '"valid_from":null,"valid_to":"2025-04-01",'
+                    '"date_basis":"annual cutoff","confidence":90}]}'
+                )
+            }
+        }
+        with patch.object(client, "_post", return_value=response):
+            extraction = client.extract_claims("prompt")
+
+        self.assertEqual(extraction.claims[0].confidence, 0.9)
+        self.assertIsNone(extraction.claims[0].valid_to)
 
     def test_low_confidence_primary_result_uses_fallback_model(self):
         result = ingest_upload(

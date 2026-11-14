@@ -45,7 +45,9 @@ conflates:
 | Full semantic passage index | What passages are relevant, and where do they occur in the source sequence? | Embeddings for every passage plus previous/next passage links |
 | Temporal routing | Which passages need expensive temporal analysis? | High-recall automatic tags for temporal expressions, quantities, exceptions, and rule-version language |
 | Claim atomization | What independent regulatory propositions occur in a routed passage? | Fast 3B structured extractor with an 8B fallback for invalid, uncertain, or unresolved results |
-| Temporal semantics | Is each proposition operative, historical, transitional, proposed, rejected, commentary, an example, or unclear—and what interval is supported? | Structured model output stored before retrieval |
+| Source-anchor linking | Does the full uploaded source state an effective or supersession date outside the selected rule passage? | Exact quoted date anchors are extracted from the normalized source and linked to eligible passage claims |
+| Cached-claim temporal linking | Does an undated current passage restate a dated proposition already extracted elsewhere? | High-confidence embedding and legal-signature matching propagates only supported dates while preserving donor provenance |
+| Temporal semantics | Is each proposition operative, historical, transitional, proposed, rejected, commentary, an example, or unclear—and what interval is supported? | Model output plus source-backed anchors stored on each atomic claim before retrieval |
 | Applicability-constrained retrieval | Which temporally eligible claim best matches the question? | Date filtering followed by dense semantic and BM25 ranking |
 | Meaning verification | Did the explanation retain the selected claim's conditions, exceptions, negation, dates, forms, and quantities? | Existing atomic-fact verifier and release gate |
 
@@ -58,7 +60,8 @@ used only to rank semantically relevant claims that survive the filter.
 > Prior research separately studies temporal relation extraction, metadata-aware
 > or version-aware retrieval, and legal meaning preservation. We investigate a
 > narrower interaction: whether automatically converting mixed-temporal F-1
-> regulatory passages into temporally scoped atomic claims **before retrieval**,
+> regulatory passages into temporally scoped atomic claims, linking effective
+> and supersession anchors from the full source **before retrieval**,
 > then verifying meaning after retrieval, reduces false-safe plain-language
 > explanations. We evaluate cases where a document is valid but an individual
 > claim is historical, proposed, rejected, or otherwise non-operative.

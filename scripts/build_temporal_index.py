@@ -35,6 +35,16 @@ def main() -> None:
         help="Development limit; omit to process the full corpus.",
     )
     parser.add_argument(
+        "--passage-id",
+        action="append",
+        default=None,
+        help=(
+            "Process only this passage if it is not already cached while still "
+            "rebuilding the complete index from every available cache entry. "
+            "Repeat the option for multiple passage IDs."
+        ),
+    )
+    parser.add_argument(
         "--workers",
         type=int,
         default=2,
@@ -89,6 +99,7 @@ def main() -> None:
             client,
             fallback_model=fallback_client,
             document_ids=document_ids,
+            passage_ids=set(arguments.passage_id) if arguments.passage_id else None,
             max_passages=arguments.max_passages,
             workers=arguments.workers,
             progress=lambda message: print(message, flush=True),

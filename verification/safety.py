@@ -16,6 +16,7 @@ def verify_safety(request: SafetyVerificationRequest) -> SafetyVerificationRespo
         MeaningVerificationRequest(
             source_text=request.source_text,
             explanation=request.explanation,
+            critical_facts=request.critical_facts,
         )
     )
     reasons: list[str] = []

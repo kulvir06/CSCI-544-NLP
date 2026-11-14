@@ -73,7 +73,25 @@ class OllamaClient:
         )
         try:
             content = response["message"]["content"]
-            return ClaimExtraction.model_validate_json(content)
+            payload = json.loads(content)
+            claims = payload.get("claims", []) if isinstance(payload, dict) else []
+            if isinstance(claims, list):
+                for claim in claims:
+                    if not isinstance(claim, dict):
+                        continue
+                    confidence = claim.get("confidence")
+                    if (
+                        isinstance(confidence, (int, float))
+                        and 1 < confidence <= 100
+                    ):
+                        claim["confidence"] = confidence / 100
+                    # Small local models sometimes mistake a recurring claim
+                    # cutoff (for example April 1 in each fiscal year) for the
+                    # regulation's validity end. An end-only interval is not
+                    # defensible, so keep the role but abstain on its bounds.
+                    if claim.get("valid_to") and not claim.get("valid_from"):
+                        claim["valid_to"] = None
+            return ClaimExtraction.model_validate(payload)
         except (KeyError, TypeError, ValueError) as error:
             raise ValueError(f"Invalid temporal extraction response: {response}") from error
 

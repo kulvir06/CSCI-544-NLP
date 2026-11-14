@@ -1,6 +1,7 @@
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
+from unittest.mock import patch
 
 from evaluation.mutations import (
     change_first_date,
@@ -10,7 +11,8 @@ from evaluation.mutations import (
     reverse_first_negation,
 )
 from evaluation.runner import load_cases, run_evaluation, save_report
-from evaluation.schema import SystemConfiguration
+from evaluation.schema import ErrorType, EvaluationCase, GoldLabel, SystemConfiguration
+from retrieval.schema import TemporalVerdict
 
 
 CASE_FILE = (
@@ -43,6 +45,14 @@ class EvaluationTests(unittest.TestCase):
         self.assertEqual(
             report.systems[SystemConfiguration.COMBINED].exact_accuracy,
             1.0,
+        )
+        self.assertEqual(
+            report.systems[SystemConfiguration.STATIC_BASELINE].false_safe_count,
+            7,
+        )
+        self.assertEqual(
+            len(report.systems[SystemConfiguration.COMBINED].false_safe_wilson_95),
+            2,
         )
 
     def test_report_is_serializable(self):
@@ -77,6 +87,45 @@ class EvaluationTests(unittest.TestCase):
                 "unless",
             ),
             "Employment may continue.",
+        )
+
+    def test_automatic_temporal_verification_uses_supplied_source_passage(self):
+        case = EvaluationCase(
+            case_id="automatic-wrong-version",
+            question="How long is the STEM OPT extension?",
+            source_text="The STEM OPT extension is 17 months.",
+            explanation="The STEM OPT extension is 17 months.",
+            error_type=ErrorType.WRONG_VERSION,
+            gold_label=GoldLabel.UNSAFE,
+            temporal_verification_required=True,
+            expected_temporal_verdict=TemporalVerdict.VERIFIED_NOT_APPLICABLE,
+            relevant_date="2026-01-01",
+            passage_id="historical-passage",
+            automatic_temporal_verification=True,
+        )
+        with patch(
+            "evaluation.runner.verify_source_temporality",
+            return_value=(
+                TemporalVerdict.VERIFIED_NOT_APPLICABLE,
+                "historical-claim",
+            ),
+        ) as verification:
+            report = run_evaluation([case])
+
+        verification.assert_called_once_with(
+            "historical-passage",
+            "The STEM OPT extension is 17 months.",
+            case.relevant_date,
+        )
+        result = report.cases[0]
+        self.assertEqual(
+            result.observed_temporal_verdict,
+            TemporalVerdict.VERIFIED_NOT_APPLICABLE,
+        )
+        self.assertEqual(result.matched_temporal_claim_id, "historical-claim")
+        self.assertEqual(
+            result.predictions[SystemConfiguration.TEMPORAL_ONLY].value,
+            "unsafe",
         )
 
 
