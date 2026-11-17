@@ -7,6 +7,7 @@ from pathlib import Path
 import math
 
 from evaluation.schema import (
+    BenchmarkSplit,
     CaseEvaluationResult,
     ErrorMetrics,
     EvaluationCase,
@@ -234,7 +235,18 @@ def save_report(report: EvaluationReport, output_path: Path) -> Path:
     return output_path
 
 
-def run_file(input_path: Path, output_path: Path) -> EvaluationReport:
-    report = run_evaluation(load_cases(input_path))
+def run_file(
+    input_path: Path,
+    output_path: Path,
+    benchmark_split: BenchmarkSplit | None = None,
+) -> EvaluationReport:
+    cases = load_cases(input_path)
+    if benchmark_split is not None:
+        cases = [case for case in cases if case.benchmark_split == benchmark_split]
+        if not cases:
+            raise ValueError(
+                f"No {benchmark_split.value} cases were found in {input_path}"
+            )
+    report = run_evaluation(cases)
     save_report(report, output_path)
     return report

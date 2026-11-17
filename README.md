@@ -215,3 +215,17 @@ python3 -m scripts.summarize_evaluation \
 The current diagnostic deliberately abstains when a passage-level claim lacks
 an independently supported effective interval. This is a measured system
 limitation, not a date filled from hand-written metadata.
+
+After independent review freezes the benchmark, run the held-out test split
+without mixing in development cases:
+
+```bash
+python3 -m scripts.run_evaluation \
+  --cases data/reports/benchmark/frozen-benchmark.jsonl \
+  --split test \
+  --output data/reports/benchmark/final-test-report.json
+
+python3 -m scripts.summarize_evaluation \
+  --report data/reports/benchmark/final-test-report.json \
+  --output data/reports/benchmark/final-test-summary.md
+```

@@ -27,6 +27,12 @@ data/manifests/documents.jsonl
 !data/temporal_cache/.gitkeep
 !data/embedding_cache/.gitkeep
 !data/reports/.gitkeep
+!data/reports/benchmark/
+data/reports/benchmark/*
+!data/reports/benchmark/frozen-benchmark.jsonl
+!data/reports/benchmark/benchmark-disagreements.csv
+!data/reports/benchmark/final-test-report.json
+!data/reports/benchmark/final-test-summary.md
 !data/reviews/.gitkeep
 !data/index/.gitkeep
 !data/manifests/.gitkeep

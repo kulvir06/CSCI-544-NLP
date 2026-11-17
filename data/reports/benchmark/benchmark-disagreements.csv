@@ -1,0 +1,12 @@
+a_error_type,a_expected_temporal_verdict,a_gold_label,b_error_type,b_expected_temporal_verdict,b_gold_label,case_id,mismatched_fields,reason,reviewer_a,reviewer_b
+safe,verified_applicable,safe,safe,verified_applicable,safe,DEV-01,,not_jointly_approved,Vindhya Srinivasan,Pavan Kumar Rajesh
+wrong_version,verified_not_applicable,unsafe,wrong_version,verified_not_applicable,unsafe,DEV-03,,not_jointly_approved,Vindhya Srinivasan,Pavan Kumar Rajesh
+wrong_version,verified_not_applicable,unsafe,wrong_version,verified_not_applicable,unsafe,DEV-04,,not_jointly_approved,Vindhya Srinivasan,Pavan Kumar Rajesh
+quantity_changed,verified_applicable,unsafe,quantity_changed,verified_applicable,unsafe,DEV-05,approve,label_disagreement,Vindhya Srinivasan,Pavan Kumar Rajesh
+condition_omitted,verified_applicable,unsafe,condition_omitted,verified_applicable,unsafe,DEV-07,,not_jointly_approved,Vindhya Srinivasan,Pavan Kumar Rajesh
+safe,verified_applicable,safe,safe,verified_applicable,safe,TEST-01,,not_jointly_approved,Vindhya Srinivasan,Pavan Kumar Rajesh
+safe,verified_applicable,safe,safe,verified_applicable,safe,TEST-02,approve,label_disagreement,Vindhya Srinivasan,Pavan Kumar Rajesh
+wrong_version,verified_not_applicable,unsafe,wrong_version,verified_not_applicable,unsafe,TEST-06,approve,label_disagreement,Vindhya Srinivasan,Pavan Kumar Rajesh
+quantity_changed,verified_applicable,unsafe,quantity_changed,verified_applicable,unsafe,TEST-08,approve,label_disagreement,Vindhya Srinivasan,Pavan Kumar Rajesh
+date_changed,verified_applicable,unsafe,date_changed,verified_applicable,unsafe,TEST-09,approve,label_disagreement,Vindhya Srinivasan,Pavan Kumar Rajesh
+negation_reversed,verified_applicable,unsafe,negation_reversed,verified_applicable,unsafe,TEST-11,approve,label_disagreement,Vindhya Srinivasan,Pavan Kumar Rajesh

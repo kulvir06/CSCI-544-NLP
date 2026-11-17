@@ -10,8 +10,14 @@ from evaluation.mutations import (
     remove_clause_from_cue,
     reverse_first_negation,
 )
-from evaluation.runner import load_cases, run_evaluation, save_report
-from evaluation.schema import ErrorType, EvaluationCase, GoldLabel, SystemConfiguration
+from evaluation.runner import load_cases, run_evaluation, run_file, save_report
+from evaluation.schema import (
+    BenchmarkSplit,
+    ErrorType,
+    EvaluationCase,
+    GoldLabel,
+    SystemConfiguration,
+)
 from retrieval.schema import TemporalVerdict
 
 
@@ -63,6 +69,41 @@ class EvaluationTests(unittest.TestCase):
                 Path(temporary_directory) / "evaluation-report.json",
             )
             self.assertTrue(output.exists())
+
+    def test_run_file_can_select_the_frozen_test_split(self):
+        cases = [
+            EvaluationCase(
+                case_id="development-case",
+                source_text="The extension is 24 months.",
+                explanation="The extension is 24 months.",
+                error_type=ErrorType.SAFE,
+                gold_label=GoldLabel.SAFE,
+                benchmark_split=BenchmarkSplit.DEVELOPMENT,
+            ),
+            EvaluationCase(
+                case_id="test-case",
+                source_text="The extension is 24 months.",
+                explanation="The extension is 24 months.",
+                error_type=ErrorType.SAFE,
+                gold_label=GoldLabel.SAFE,
+                benchmark_split=BenchmarkSplit.TEST,
+            ),
+        ]
+        with TemporaryDirectory() as temporary_directory:
+            base = Path(temporary_directory)
+            input_path = base / "cases.jsonl"
+            input_path.write_text(
+                "\n".join(case.model_dump_json() for case in cases) + "\n",
+                encoding="utf-8",
+            )
+            report = run_file(
+                input_path,
+                base / "report.json",
+                BenchmarkSplit.TEST,
+            )
+
+        self.assertEqual(report.total_cases, 1)
+        self.assertEqual(report.cases[0].case_id, "test-case")
 
     def test_negative_mutation_helpers_make_subtle_changes(self):
         self.assertIn(
