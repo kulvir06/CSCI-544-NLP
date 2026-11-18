@@ -1,0 +1,479 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Final evaluation results for temporal and meaning verification of F-1 legal explanations."
+    />
+    <title>Final Results · F-1 Grounding Lab</title>
+    <style>
+      :root {
+        --ink: #142a3b;
+        --text: #243941;
+        --muted: #66767d;
+        --paper: #f8f6ef;
+        --surface: #ffffff;
+        --line: #dce3df;
+        --teal: #0b9486;
+        --teal-dark: #07685f;
+        --teal-soft: #e1f2ed;
+        --orange: #f47a39;
+        --orange-soft: #fbe7d8;
+        --red: #b43a3a;
+        --red-soft: #fde8e5;
+        --blue: #356e96;
+        --blue-soft: #e7f0f6;
+        --shadow: 0 18px 55px rgba(25, 45, 42, 0.08);
+        color-scheme: light;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      * { box-sizing: border-box; }
+      html { scroll-behavior: smooth; }
+      body {
+        margin: 0;
+        min-width: 320px;
+        color: var(--text);
+        background:
+          radial-gradient(circle at 12% 1%, rgba(11, 148, 134, 0.1), transparent 27rem),
+          radial-gradient(circle at 96% 30%, rgba(244, 122, 57, 0.07), transparent 24rem),
+          var(--paper);
+      }
+
+      a { color: inherit; }
+      button { font: inherit; }
+      .site-header {
+        min-height: 76px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 24px;
+        padding: 0 max(24px, calc((100vw - 1240px) / 2));
+        border-bottom: 1px solid rgba(20, 42, 59, 0.09);
+        background: rgba(248, 246, 239, 0.9);
+        backdrop-filter: blur(16px);
+        position: sticky;
+        top: 0;
+        z-index: 10;
+      }
+      .brand { display: flex; gap: 11px; align-items: center; text-decoration: none; }
+      .brand-mark {
+        display: grid;
+        place-items: center;
+        width: 38px;
+        height: 38px;
+        border-radius: 12px;
+        background: var(--ink);
+        color: white;
+        font-weight: 850;
+        letter-spacing: -0.04em;
+      }
+      .brand strong, .brand small { display: block; }
+      .brand strong { color: var(--ink); font-size: 0.96rem; }
+      .brand small { margin-top: 2px; color: var(--muted); font-size: 0.73rem; }
+      .header-links { display: flex; gap: 8px; align-items: center; }
+      .header-links a {
+        padding: 9px 12px;
+        border-radius: 9px;
+        color: var(--muted);
+        font-size: 0.78rem;
+        font-weight: 750;
+        text-decoration: none;
+      }
+      .header-links a:hover { color: var(--teal-dark); background: var(--teal-soft); }
+      .header-links .active { color: white; background: var(--ink); }
+
+      main { max-width: 1240px; margin: 0 auto; padding: 72px 24px 90px; }
+      .eyebrow {
+        margin: 0 0 13px;
+        color: var(--teal-dark);
+        font-size: 0.74rem;
+        font-weight: 850;
+        letter-spacing: 0.13em;
+        text-transform: uppercase;
+      }
+      h1, h2, h3, p { overflow-wrap: anywhere; }
+      h1 {
+        max-width: 950px;
+        margin: 0;
+        color: var(--ink);
+        font-family: Georgia, "Times New Roman", serif;
+        font-size: clamp(2.75rem, 6vw, 5.7rem);
+        font-weight: 500;
+        letter-spacing: -0.052em;
+        line-height: 0.96;
+      }
+      h2 { margin: 0; color: var(--ink); font-size: clamp(1.65rem, 3vw, 2.45rem); letter-spacing: -0.025em; }
+      h3 { margin: 0; color: var(--ink); font-size: 1.02rem; }
+      .hero { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 72px; align-items: end; }
+      .lede { max-width: 820px; margin: 24px 0 0; color: var(--muted); font-size: 1.08rem; line-height: 1.68; }
+      .hero-result {
+        padding: 24px;
+        border-left: 4px solid var(--teal);
+        background: rgba(255, 255, 255, 0.62);
+      }
+      .hero-result span { display: block; color: var(--teal-dark); font-size: 0.72rem; font-weight: 850; letter-spacing: 0.1em; text-transform: uppercase; }
+      .hero-result strong { display: block; margin-top: 8px; color: var(--ink); font-family: Georgia, "Times New Roman", serif; font-size: 2.45rem; font-weight: 500; }
+      .hero-result p { margin: 5px 0 0; color: var(--muted); font-size: 0.84rem; line-height: 1.45; }
+
+      .metric-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin: 48px 0 0; }
+      .metric {
+        padding: 22px;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: rgba(255, 255, 255, 0.8);
+        box-shadow: var(--shadow);
+      }
+      .metric span { color: var(--muted); font-size: 0.72rem; font-weight: 780; text-transform: uppercase; letter-spacing: 0.08em; }
+      .metric strong { display: block; margin-top: 7px; color: var(--ink); font-size: 2rem; letter-spacing: -0.045em; }
+      .metric small { display: block; margin-top: 7px; color: var(--muted); font-size: 0.76rem; line-height: 1.45; }
+
+      .section { margin-top: 84px; }
+      .section-heading { display: flex; justify-content: space-between; gap: 30px; align-items: end; margin-bottom: 30px; }
+      .section-heading p { max-width: 560px; margin: 0; color: var(--muted); line-height: 1.55; }
+      .results-layout { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.65fr); gap: 28px; align-items: stretch; }
+      .panel { border: 1px solid var(--line); border-radius: 20px; background: var(--surface); box-shadow: var(--shadow); }
+      .chart-panel { padding: 28px 28px 24px; }
+      .chart-head { display: flex; justify-content: space-between; gap: 20px; align-items: start; }
+      .chart-head p { margin: 7px 0 0; color: var(--muted); font-size: 0.82rem; }
+      .legend { display: flex; gap: 14px; flex-wrap: wrap; color: var(--muted); font-size: 0.74rem; }
+      .legend span { display: inline-flex; align-items: center; gap: 6px; }
+      .swatch { width: 10px; height: 10px; border-radius: 2px; }
+      .swatch.teal { background: var(--teal); }
+      .swatch.orange { background: var(--orange); }
+      .bar-chart {
+        min-height: 360px;
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: clamp(12px, 3vw, 34px);
+        align-items: end;
+        margin-top: 32px;
+        padding: 26px 12px 0 48px;
+        border-left: 1px solid var(--line);
+        border-bottom: 1px solid var(--line);
+        background: repeating-linear-gradient(to top, transparent 0, transparent 69px, rgba(20, 42, 59, 0.07) 70px);
+        position: relative;
+      }
+      .axis-label { position: absolute; left: 0; color: #87949a; font-size: 0.66rem; transform: translateX(-115%); }
+      .axis-label.a100 { top: 19px; }
+      .axis-label.a80 { top: 88px; }
+      .axis-label.a60 { top: 158px; }
+      .axis-label.a40 { top: 228px; }
+      .axis-label.a20 { top: 298px; }
+      .axis-label.a0 { bottom: -4px; }
+      .bar-group { height: 100%; display: grid; grid-template-rows: 1fr auto; align-items: end; }
+      .bar-pair { height: 300px; display: flex; align-items: end; justify-content: center; gap: 7px; }
+      .bar {
+        width: min(42px, 42%);
+        height: calc(var(--value) * 1%);
+        min-height: 2px;
+        border-radius: 6px 6px 0 0;
+        position: relative;
+      }
+      .bar.teal { background: var(--teal); }
+      .bar.orange { background: var(--orange); }
+      .bar b { position: absolute; top: -23px; left: 50%; transform: translateX(-50%); color: var(--ink); font-size: 0.69rem; white-space: nowrap; }
+      .bar-label { min-height: 48px; padding: 10px 2px 0; color: var(--muted); font-size: 0.72rem; font-weight: 720; text-align: center; line-height: 1.25; }
+
+      .composition { padding: 28px; display: flex; flex-direction: column; }
+      .donut {
+        width: 180px;
+        aspect-ratio: 1;
+        display: grid;
+        place-items: center;
+        margin: 28px auto;
+        border-radius: 50%;
+        background: conic-gradient(var(--orange) 0 70.83%, var(--teal) 70.83% 95.83%, #9aa5aa 95.83% 100%);
+        position: relative;
+      }
+      .donut::after { content: ""; position: absolute; inset: 29px; border-radius: 50%; background: white; }
+      .donut div { position: relative; z-index: 1; text-align: center; }
+      .donut strong { display: block; color: var(--ink); font-size: 2rem; }
+      .donut span { color: var(--muted); font-size: 0.72rem; }
+      .composition-list { display: grid; gap: 12px; margin-top: auto; }
+      .composition-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; color: var(--muted); font-size: 0.83rem; }
+      .composition-row span:first-child { display: inline-flex; align-items: center; gap: 8px; }
+      .composition-row i { width: 9px; height: 9px; border-radius: 50%; }
+      .composition-row strong { color: var(--ink); }
+
+      .comparison-strip { display: grid; grid-template-columns: 1fr auto 1fr; gap: 28px; align-items: center; padding: 30px; }
+      .comparison-point span { color: var(--muted); font-size: 0.73rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
+      .comparison-point strong { display: block; margin-top: 6px; color: var(--ink); font-size: 2.1rem; }
+      .comparison-point p { margin: 7px 0 0; color: var(--muted); font-size: 0.82rem; line-height: 1.5; }
+      .comparison-arrow { color: var(--teal); font-size: 2rem; font-weight: 400; }
+      .comparison-note { margin: 16px 0 0; color: var(--teal-dark); font-size: 0.85rem; font-weight: 750; text-align: center; }
+
+      .examples-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+      .example { padding: 26px; }
+      .example-type { margin: 0 0 7px; color: var(--teal-dark); font-size: 0.7rem; font-weight: 850; letter-spacing: 0.1em; text-transform: uppercase; }
+      .example.meaning .example-type { color: #b6541f; }
+      .passage { margin: 20px 0 0; padding: 18px; border-radius: 12px; background: var(--teal-soft); color: var(--ink); font-family: Georgia, "Times New Roman", serif; line-height: 1.55; }
+      .meaning .passage { background: var(--orange-soft); }
+      mark { padding: 2px 5px; border-radius: 4px; background: white; color: var(--teal-dark); font-family: inherit; font-weight: 700; }
+      .meaning mark { color: #b6541f; }
+      .verdicts { display: grid; gap: 9px; margin-top: 18px; }
+      .verdict { display: grid; grid-template-columns: 120px 1fr; gap: 12px; align-items: baseline; font-size: 0.8rem; }
+      .verdict span { color: var(--muted); font-weight: 750; }
+      .verdict strong { line-height: 1.45; }
+      .pass-text { color: var(--teal-dark); }
+      .block-text { color: var(--red); }
+
+      .table-panel { overflow: hidden; }
+      .table-toolbar { display: flex; justify-content: space-between; gap: 20px; align-items: center; padding: 22px 24px; border-bottom: 1px solid var(--line); }
+      .filters { display: flex; gap: 7px; flex-wrap: wrap; }
+      .filter {
+        padding: 7px 10px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: white;
+        color: var(--muted);
+        font-size: 0.72rem;
+        font-weight: 750;
+        cursor: pointer;
+      }
+      .filter:hover, .filter.active { border-color: var(--teal); background: var(--teal-soft); color: var(--teal-dark); }
+      .table-wrap { overflow-x: auto; }
+      table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+      th, td { padding: 13px 15px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; line-height: 1.45; }
+      th { color: var(--muted); background: #fafbf8; font-size: 0.66rem; letter-spacing: 0.07em; text-transform: uppercase; }
+      td:first-child { color: var(--ink); font-weight: 800; white-space: nowrap; }
+      td:nth-child(3) { min-width: 320px; }
+      .badge { display: inline-flex; align-items: center; padding: 5px 8px; border-radius: 999px; font-size: 0.65rem; font-weight: 820; text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap; }
+      .safe { background: var(--teal-soft); color: var(--teal-dark); }
+      .unsafe { background: var(--red-soft); color: var(--red); }
+      .abstain { background: var(--orange-soft); color: #a55622; }
+      .correct { color: var(--teal-dark); font-weight: 780; }
+      .miss { color: var(--red); font-weight: 780; }
+      .withheld { color: #a55622; font-weight: 780; }
+
+      .takeaway {
+        margin-top: 84px;
+        padding: 38px;
+        border-radius: 20px;
+        background: var(--ink);
+        color: white;
+        text-align: center;
+      }
+      .takeaway span { color: #9bdcd4; font-size: 0.72rem; font-weight: 850; letter-spacing: 0.11em; text-transform: uppercase; }
+      .takeaway strong { display: block; max-width: 900px; margin: 11px auto 0; font-family: Georgia, "Times New Roman", serif; font-size: clamp(1.6rem, 3vw, 2.55rem); font-weight: 500; line-height: 1.25; }
+      .takeaway p { max-width: 750px; margin: 16px auto 0; color: #c9d5d8; font-size: 0.88rem; line-height: 1.6; }
+      footer { padding: 28px 24px; border-top: 1px solid var(--line); color: #839097; font-size: 0.72rem; text-align: center; }
+
+      @media (max-width: 960px) {
+        .hero, .results-layout { grid-template-columns: 1fr; gap: 28px; }
+        .hero-result { max-width: 520px; }
+        .metric-grid { grid-template-columns: 1fr 1fr; }
+        .examples-grid { grid-template-columns: 1fr; }
+        .composition { min-height: 430px; }
+      }
+      @media (max-width: 680px) {
+        .site-header { padding: 12px 16px; }
+        .brand small, .header-links a:first-child { display: none; }
+        main { padding: 48px 14px 64px; }
+        .metric-grid { grid-template-columns: 1fr; }
+        .section { margin-top: 64px; }
+        .section-heading, .chart-head, .table-toolbar { align-items: flex-start; flex-direction: column; }
+        .chart-panel { padding: 22px 14px; }
+        .bar-chart { min-height: 320px; gap: 8px; padding-left: 32px; }
+        .bar-pair { height: 260px; gap: 3px; }
+        .bar b { font-size: 0.59rem; }
+        .bar-label { font-size: 0.63rem; }
+        .comparison-strip { grid-template-columns: 1fr; gap: 16px; }
+        .comparison-arrow { transform: rotate(90deg); justify-self: center; }
+        .verdict { grid-template-columns: 1fr; gap: 3px; }
+        th, td { padding: 11px 12px; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        html { scroll-behavior: auto; }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="index.html" aria-label="F-1 Grounding Lab home">
+        <span class="brand-mark" aria-hidden="true">F1</span>
+        <span><strong>Grounding Lab</strong><small>Temporal + meaning verification</small></span>
+      </a>
+      <nav class="header-links" aria-label="Primary navigation">
+        <a href="https://github.com/kulvir06/CSCI-544-NLP">Project repository</a>
+        <a class="active" href="index.html" aria-current="page">Final results</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div>
+          <p class="eyebrow">CSCI 544 · Team 39 · Final evaluation</p>
+          <h1>Two checks catch what either one misses.</h1>
+          <p class="lede">
+            We tested an unverified RAG control, temporal verification, meaning verification and
+            the combined safety gate on 24 reviewed F-1 employment cases. The combined verifier
+            made the expected decision in 22 cases and blocked 16 of 17 unsafe explanations.
+          </p>
+        </div>
+        <aside class="hero-result" aria-label="Primary result">
+          <span>Primary result</span>
+          <strong>16 / 17</strong>
+          <p>Unsafe explanations detected before release</p>
+        </aside>
+      </section>
+
+      <section class="metric-grid" aria-label="Evaluation summary">
+        <article class="metric"><span>Reviewed benchmark</span><strong>24</strong><small>6 safe · 17 unsafe · 1 expected abstention</small></article>
+        <article class="metric"><span>Combined accuracy</span><strong>91.7%</strong><small>22 of 24 exact final decisions</small></article>
+        <article class="metric"><span>Unsafe detection</span><strong>94.1%</strong><small>16 of 17 unsafe explanations blocked</small></article>
+        <article class="metric"><span>Abstention rate</span><strong>8.3%</strong><small>2 cautious abstentions across 24 cases</small></article>
+      </section>
+
+      <section class="section" aria-labelledby="results-title">
+        <div class="section-heading">
+          <div><p class="eyebrow">Controlled comparison</p><h2 id="results-title">Full benchmark performance</h2></div>
+          <p>Exact accuracy considers every safe, unsafe and abstain decision. Unsafe detection considers only the 17 deliberately unsafe explanations.</p>
+        </div>
+        <div class="results-layout">
+          <article class="panel chart-panel">
+            <div class="chart-head">
+              <div><h3>Verification ablation</h3><p>Percentage across the 24-case benchmark</p></div>
+              <div class="legend" aria-label="Chart legend"><span><i class="swatch teal"></i>Exact accuracy</span><span><i class="swatch orange"></i>Unsafe cases caught</span></div>
+            </div>
+            <div class="bar-chart" role="img" aria-label="RAG control: 25 percent accuracy and 0 percent unsafe detection. Temporal only: 41.7 percent accuracy and 23.5 percent unsafe detection. Meaning only: 83.3 percent accuracy and 82.4 percent unsafe detection. Combined: 91.7 percent accuracy and 94.1 percent unsafe detection.">
+              <span class="axis-label a100">100%</span><span class="axis-label a80">80%</span><span class="axis-label a60">60%</span><span class="axis-label a40">40%</span><span class="axis-label a20">20%</span><span class="axis-label a0">0%</span>
+              <div class="bar-group"><div class="bar-pair"><div class="bar teal" style="--value:25"><b>25.0%</b></div><div class="bar orange" style="--value:0"><b>0.0%</b></div></div><div class="bar-label">RAG control</div></div>
+              <div class="bar-group"><div class="bar-pair"><div class="bar teal" style="--value:41.7"><b>41.7%</b></div><div class="bar orange" style="--value:23.5"><b>23.5%</b></div></div><div class="bar-label">Temporal only</div></div>
+              <div class="bar-group"><div class="bar-pair"><div class="bar teal" style="--value:83.3"><b>83.3%</b></div><div class="bar orange" style="--value:82.4"><b>82.4%</b></div></div><div class="bar-label">Meaning only</div></div>
+              <div class="bar-group"><div class="bar-pair"><div class="bar teal" style="--value:91.7"><b>91.7%</b></div><div class="bar orange" style="--value:94.1"><b>94.1%</b></div></div><div class="bar-label">Combined</div></div>
+            </div>
+          </article>
+
+          <article class="panel composition">
+            <div><h3>Benchmark composition</h3><p class="lede" style="margin-top:7px;font-size:.84rem">A targeted challenge set, not a sample of normal user traffic.</p></div>
+            <div class="donut" role="img" aria-label="17 unsafe, 6 safe and 1 expected abstention cases"><div><strong>24</strong><span>total cases</span></div></div>
+            <div class="composition-list">
+              <div class="composition-row"><span><i style="background:var(--orange)"></i>Unsafe explanations</span><strong>17</strong></div>
+              <div class="composition-row"><span><i style="background:var(--teal)"></i>Safe controls</span><strong>6</strong></div>
+              <div class="composition-row"><span><i style="background:#9aa5aa"></i>Expected abstention</span><strong>1</strong></div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="section" aria-labelledby="coverage-title">
+        <div class="section-heading">
+          <div><p class="eyebrow">Coverage expansion</p><h2 id="coverage-title">The result held as the benchmark grew</h2></div>
+          <p>The expanded benchmark nearly doubled the unsafe challenges and exposed a subtle condition failure that the smaller set did not contain.</p>
+        </div>
+        <article class="panel comparison-strip">
+          <div class="comparison-point"><span>Initial benchmark</span><strong>13 cases</strong><p>9 unsafe · 92.3% combined accuracy · 9/9 unsafe detected</p></div>
+          <div class="comparison-arrow" aria-hidden="true">→</div>
+          <div class="comparison-point"><span>Expanded benchmark</span><strong>24 cases</strong><p>17 unsafe · 91.7% combined accuracy · 16/17 unsafe detected</p></div>
+        </article>
+        <p class="comparison-note">Coverage increased 85% while combined accuracy remained above 91%.</p>
+      </section>
+
+      <section class="section" aria-labelledby="examples-title">
+        <div class="section-heading">
+          <div><p class="eyebrow">Qualitative evidence</p><h2 id="examples-title">Why the two verifiers are complementary</h2></div>
+          <p>One example is faithful to the wrong rule. The other uses the right rule but reverses its meaning.</p>
+        </div>
+        <div class="examples-grid">
+          <article class="panel example">
+            <p class="example-type">Temporal failure · TEST-05</p>
+            <h3>How long was STEM OPT in 2020?</h3>
+            <p class="passage">“This interim rule will allow ... an extension ... for up to <mark>17 months</mark>.”</p>
+            <div class="verdicts">
+              <div class="verdict"><span>Meaning verifier</span><strong class="pass-text">Passes: “17 months” matches the source</strong></div>
+              <div class="verdict"><span>Temporal verifier</span><strong class="block-text">Blocks: the claim was superseded in 2016</strong></div>
+            </div>
+          </article>
+          <article class="panel example meaning">
+            <p class="example-type">Meaning failure · TEST-10</p>
+            <h3>May a student begin OPT before the approved date?</h3>
+            <p class="passage">“A student may <mark>not</mark> begin employment before the approved start date.”</p>
+            <div class="verdicts">
+              <div class="verdict"><span>Temporal verifier</span><strong class="pass-text">Passes: the source applies in 2026</strong></div>
+              <div class="verdict"><span>Meaning verifier</span><strong class="block-text">Blocks: removing “not” reverses the rule</strong></div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="section" aria-labelledby="cases-title">
+        <div class="section-heading">
+          <div><p class="eyebrow">Case-level results</p><h2 id="cases-title">All 24 reviewed cases</h2></div>
+          <p>Use the filters to inspect safe controls, deliberately unsafe explanations and the expected abstention case.</p>
+        </div>
+        <article class="panel table-panel">
+          <div class="table-toolbar">
+            <h3><span id="visible-count">24</span> cases shown</h3>
+            <div class="filters" role="group" aria-label="Filter benchmark cases">
+              <button class="filter active" type="button" data-filter="all">All</button>
+              <button class="filter" type="button" data-filter="safe">Safe</button>
+              <button class="filter" type="button" data-filter="unsafe">Unsafe</button>
+              <button class="filter" type="button" data-filter="abstain">Abstain</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Case</th><th>Gold label</th><th>Scenario tested</th><th>Combined decision</th><th>Outcome</th></tr></thead>
+              <tbody id="case-rows">
+                <tr data-label="safe"><td>DEV-01</td><td><span class="badge safe">Safe</span></td><td>Historical 17-month STEM OPT rule with the E-Verify condition preserved</td><td>Safe</td><td class="correct">Correct</td></tr>
+                <tr data-label="safe"><td>DEV-02</td><td><span class="badge safe">Safe</span></td><td>Correct 150-day unemployment limit</td><td>Safe</td><td class="correct">Correct</td></tr>
+                <tr data-label="unsafe"><td>DEV-03</td><td><span class="badge unsafe">Unsafe</span></td><td>24-month rule applied before its effective date</td><td>Unsafe</td><td class="correct">Correct</td></tr>
+                <tr data-label="unsafe"><td>DEV-04</td><td><span class="badge unsafe">Unsafe</span></td><td>Proposed rule treated as operative law</td><td>Unsafe</td><td class="correct">Correct</td></tr>
+                <tr data-label="unsafe"><td>DEV-05</td><td><span class="badge unsafe">Unsafe</span></td><td>Unemployment limit changed from 150 to 120 days</td><td>Unsafe</td><td class="correct">Correct</td></tr>
+                <tr data-label="unsafe"><td>DEV-06</td><td><span class="badge unsafe">Unsafe</span></td><td>Reporting deadline changed from 10 to 30 days</td><td>Unsafe</td><td class="correct">Correct</td></tr>
+                <tr data-label="unsafe"><td>DEV-07</td><td><span class="badge unsafe">Unsafe</span></td><td>E-Verify employer condition explicitly removed</td><td>Safe</td><td class="miss">False-safe</td></tr>
+                <tr data-label="unsafe"><td>DEV-08</td><td><span class="badge unsafe">Unsafe</span></td><td>Form I-765 substituted for Form I-983</td><td>Unsafe</td><td class="correct">Correct</td></tr>
+                <tr data-label="safe"><td>TEST-01</td><td><span class="badge safe">Safe</span></td><td>Correct 24-month duration and degree conditions</td><td>Safe</td><td class="correct">Correct</td></tr>
+                <tr data-label="safe"><td>TEST-02</td><td><span class="badge safe">Safe</span></td><td>Correct 180-day continuation while an application is pending</td><td>Safe</td><td class="correct">Correct</td></tr>
+                <tr data-label="safe"><td>TEST-03</td><td><span class="badge safe">Safe</span></td><td>Correct six-month validation and 10-business-day reporting</td><td>Abstain</td><td class="withheld">Conservative abstention</td></tr>
+                <tr data-label="safe"><td>TEST-04</td><td><span class="badge safe">Safe</span></td><td>Correct cap-gap protection until April 1 or the approved start date</td><td>Safe</td><td class="correct">Correct</td></tr>
+                <tr data-label="unsafe"><td>TEST-05</td><td><span class="badge unsafe">Unsafe</span></td><td>Superseded 17-month rule used for 2020</td><td>Unsafe</td><td class="correct">Correct</td></tr>
+                <tr data-label="unsafe"><td>TEST-06</td><td><span class="badge unsafe">Unsafe</span></td><td>Historical October 1 cap-gap ending used for 2026</td><td>Unsafe</td><td class="correct">Correct</td></tr>
+                <tr data-label="unsafe"><td>TEST-07</td><td><span class="badge unsafe">Unsafe</span></td><td>Proposed $70,000 OPT fee treated as active</td><td>Unsafe</td><td class="correct">Correct</td></tr>
+                <tr data-label="unsafe"><td>TEST-08</td><td><span class="badge unsafe">Unsafe</span></td><td>Pending authorization changed from 180 to 240 days</td><td>Unsafe</td><td class="correct">Correct</td></tr>
+                <tr data-label="unsafe"><td>TEST-09</td><td><span class="badge unsafe">Unsafe</span></td><td>Cap-gap ending changed from April 1 to October 1</td><td>Unsafe</td><td class="correct">Correct</td></tr>
+                <tr data-label="unsafe"><td>TEST-10</td><td><span class="badge unsafe">Unsafe</span></td><td>“May not begin employment” changed to “may begin”</td><td>Unsafe</td><td class="correct">Correct</td></tr>
+                <tr data-label="unsafe"><td>TEST-11</td><td><span class="badge unsafe">Unsafe</span></td><td>“May not exceed 150 days” changed to “may exceed”</td><td>Unsafe</td><td class="correct">Correct</td></tr>
+                <tr data-label="unsafe"><td>TEST-12</td><td><span class="badge unsafe">Unsafe</span></td><td>Cap-gap filing and change-of-status conditions omitted</td><td>Unsafe</td><td class="correct">Correct</td></tr>
+                <tr data-label="unsafe"><td>TEST-13</td><td><span class="badge unsafe">Unsafe</span></td><td>Cross-referenced start-date exception omitted</td><td>Unsafe</td><td class="correct">Correct</td></tr>
+                <tr data-label="unsafe"><td>TEST-14</td><td><span class="badge unsafe">Unsafe</span></td><td>Transitional 120-day unemployment exception omitted</td><td>Unsafe</td><td class="correct">Correct</td></tr>
+                <tr data-label="unsafe"><td>TEST-15</td><td><span class="badge unsafe">Unsafe</span></td><td>Form I-20 substituted for Form I-766</td><td>Unsafe</td><td class="correct">Correct</td></tr>
+                <tr data-label="abstain"><td>TEST-16</td><td><span class="badge abstain">Abstain</span></td><td>Question extends beyond independently supported temporal scope</td><td>Abstain</td><td class="correct">Correct</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+
+      <section class="takeaway" aria-labelledby="takeaway-title">
+        <span>Final takeaway</span>
+        <strong id="takeaway-title">Safe legal explanations require the right rule and preserved meaning.</strong>
+        <p>The current evaluation covers F-1 employment and extension rules. Expanding to other legal domains requires authoritative documents, reviewed benchmarks and temporal re-indexing whenever regulations change.</p>
+      </section>
+    </main>
+
+    <footer>Research prototype · Not legal advice · Results from the reviewed 24-case project benchmark</footer>
+    <script>
+      const buttons = document.querySelectorAll("[data-filter]");
+      const rows = document.querySelectorAll("#case-rows tr");
+      const visibleCount = document.querySelector("#visible-count");
+
+      buttons.forEach((button) => {
+        button.addEventListener("click", () => {
+          const filter = button.dataset.filter;
+          buttons.forEach((item) => item.classList.toggle("active", item === button));
+          let count = 0;
+          rows.forEach((row) => {
+            const visible = filter === "all" || row.dataset.label === filter;
+            row.hidden = !visible;
+            if (visible) count += 1;
+          });
+          visibleCount.textContent = String(count);
+        });
+      });
+    </script>
+  </body>
+</html>
