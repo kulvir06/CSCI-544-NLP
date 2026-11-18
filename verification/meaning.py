@@ -28,11 +28,21 @@ QUANTITY_PATTERN = re.compile(
     r"(hours?|days?|weeks?|months?|years?|percent|%)\b",
     re.I,
 )
+CHECKLIST_QUANTITY_PATTERN = re.compile(
+    r"\b(\d+(?:\.\d+)?)\b(?:\s+[A-Za-z-]+){0,2}\s+"
+    r"(hours?|days?|weeks?|months?|years?|percent)\b",
+    re.I,
+)
 FORM_PATTERN = re.compile(r"\bForm\s+(I-\d+[A-Z]?)\b", re.I)
 DATE_PATTERN = re.compile(
     r"\b(?:January|February|March|April|May|June|July|August|September|"
     r"October|November|December)\s+\d{1,2},\s+\d{4}\b|"
     r"\b\d{4}-\d{2}-\d{2}\b|\b\d{1,2}/\d{1,2}/\d{4}\b",
+    re.I,
+)
+MONTH_DAY_PATTERN = re.compile(
+    r"\b(January|February|March|April|May|June|July|August|September|"
+    r"October|November|December)\s+(\d{1,2})\b",
     re.I,
 )
 NEGATION_PATTERN = re.compile(
@@ -125,11 +135,64 @@ def extract_atomic_facts(source_text: str) -> list[AtomicFact]:
     return facts
 
 
+def _facts_from_checklist(items: list[str]) -> list[AtomicFact]:
+    """Turn a reviewed checklist into one independently testable fact per row.
+
+    The benchmark checklist identifies which facts are legally important. This
+    prevents incidental numbers or dates in a long evidence excerpt from being
+    treated as requirements that every concise explanation must repeat.
+    """
+    facts: list[AtomicFact] = []
+    for item in items:
+        text = item.strip()
+        if not text:
+            continue
+        fact_type = FactType.PROPOSITION
+        normalized_value = None
+        form = FORM_PATTERN.search(text)
+        date_match = DATE_PATTERN.search(text)
+        quantity = QUANTITY_PATTERN.search(text) or CHECKLIST_QUANTITY_PATTERN.search(text)
+        month_day = MONTH_DAY_PATTERN.search(text)
+        if form:
+            fact_type = FactType.FORM
+            normalized_value = form.group(1).upper()
+        elif date_match:
+            fact_type = FactType.DATE
+            normalized_value = _normalize_date(date_match.group(0))
+        elif month_day:
+            fact_type = FactType.DATE
+            month = datetime.strptime(month_day.group(1).title(), "%B").month
+            normalized_value = f"--{month:02d}-{int(month_day.group(2)):02d}"
+        elif quantity:
+            number, unit = quantity.groups()
+            normalized_unit = "percent" if unit == "%" else unit.lower().rstrip("s")
+            fact_type = FactType.QUANTITY
+            normalized_value = f"{number} {normalized_unit}"
+        elif EXCEPTION_PATTERN.search(text):
+            fact_type = FactType.EXCEPTION
+        elif NEGATION_PATTERN.search(text):
+            fact_type = FactType.NEGATION
+        elif CONDITION_PATTERN.search(text):
+            fact_type = FactType.CONDITION
+        elif OBLIGATION_PATTERN.search(text):
+            fact_type = FactType.OBLIGATION
+        facts.append(
+            AtomicFact(
+                fact_id=f"fact-{len(facts) + 1:03d}",
+                fact_type=fact_type,
+                source_text=text,
+                normalized_value=normalized_value,
+            )
+        )
+    return facts
+
+
 def _quantity_values(text: str) -> dict[str, set[str]]:
     values: dict[str, set[str]] = defaultdict(set)
-    for number, unit in QUANTITY_PATTERN.findall(text):
-        normalized_unit = "percent" if unit == "%" else unit.lower().rstrip("s")
-        values[normalized_unit].add(number)
+    for pattern in (QUANTITY_PATTERN, CHECKLIST_QUANTITY_PATTERN):
+        for number, unit in pattern.findall(text):
+            normalized_unit = "percent" if unit == "%" else unit.lower().rstrip("s")
+            values[normalized_unit].add(number)
     return values
 
 
@@ -151,6 +214,9 @@ def _check_fact(fact: AtomicFact, explanation: str) -> FactCheck:
         explanation_dates = {
             _normalize_date(value) for value in DATE_PATTERN.findall(explanation)
         }
+        for month_name, day in MONTH_DAY_PATTERN.findall(explanation):
+            month = datetime.strptime(month_name.title(), "%B").month
+            explanation_dates.add(f"--{month:02d}-{int(day):02d}")
         if fact.normalized_value in explanation_dates:
             status = FactStatus.PRESERVED
             reason = "The same calendar date appears in the explanation."
@@ -172,6 +238,12 @@ def _check_fact(fact: AtomicFact, explanation: str) -> FactCheck:
         elif coverage >= 0.35:
             status = FactStatus.CONTRADICTED
             reason = "Related content appears, but the limiting or negative meaning is lost."
+    elif fact.fact_type == FactType.PROPOSITION:
+        if coverage >= 0.3:
+            status = FactStatus.PRESERVED
+            reason = "The explanation preserves the key terms of this proposition."
+        else:
+            reason = "The explanation does not preserve this required proposition."
     else:
         cue_pattern = {
             FactType.CONDITION: CONDITION_PATTERN,
@@ -196,7 +268,11 @@ def _check_fact(fact: AtomicFact, explanation: str) -> FactCheck:
 def verify_meaning(
     request: MeaningVerificationRequest,
 ) -> MeaningVerificationResponse:
-    facts = extract_atomic_facts(request.source_text)
+    facts = (
+        _facts_from_checklist(request.critical_facts)
+        if request.critical_facts
+        else extract_atomic_facts(request.source_text)
+    )
     checks = [_check_fact(fact, request.explanation) for fact in facts]
     preserved = sum(check.status == FactStatus.PRESERVED for check in checks)
     missing = sum(check.status == FactStatus.MISSING for check in checks)

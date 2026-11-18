@@ -63,6 +63,15 @@ class TemporalClaim(BaseModel):
     valid_from: Optional[date] = None
     valid_to: Optional[date] = None
     valid_as_of: Optional[date] = None
+    base_valid_from: Optional[date] = None
+    base_valid_to: Optional[date] = None
+    base_valid_as_of: Optional[date] = None
+    linked_valid_from: Optional[date] = None
+    linked_valid_to: Optional[date] = None
+    linked_valid_as_of: Optional[date] = None
+    temporal_link_sources: list[str] = Field(default_factory=list)
+    temporal_link_method: Optional[str] = None
+    temporal_link_confidence: Optional[float] = Field(default=None, ge=0.0, le=1.0)
     date_basis: str
     temporal_confidence: float = Field(ge=0.0, le=1.0)
     extraction_model: str

@@ -131,10 +131,32 @@ ranking as semantic ranking.
 - `data/index/semantic_passages.jsonl`: every passage, routing decision,
   sequence links, provenance, and semantic embedding
 - `data/index/temporal_claims.jsonl`: temporal claims linked to source passages
+- `data/index/linked_temporal_claims.jsonl`: conservative cache-only temporal
+  links; retrieval uses this file only while its recorded base-index hash matches
 - `data/reports`: ingestion reports
 
 ChromaDB is not used. The prototype uses an auditable local JSONL index because
 the current corpus is small.
+
+Federal Register effective dates often occur in a `DATES` header outside the
+selected rule paragraph. The temporal builder therefore extracts exact date
+anchors from the full normalized upload and links them to eligible atomic
+claims. It also uses explicit supersession language (for example, a statement
+that the 17-month rules remain in force through a named date) rather than
+inventing an end date.
+
+Cached claims that express the same legal proposition in different sources can
+also share a supported start date. Build this local enhancement without Ollama:
+
+```bash
+python3 -m scripts.build_linked_temporal_index
+```
+
+The linker requires high embedding similarity plus compatible lexical, numeric,
+form, and CFR-reference signatures. It never overwrites a claim's original
+interval, records the donor claim and confidence, and leaves uncertain claims
+unscoped. If the base index changes, retrieval automatically ignores a stale
+linked index until it is rebuilt.
 
 ## Evaluation
 
@@ -162,3 +184,48 @@ python3 -m unittest discover -s tests -v
 The test suite includes a mixed passage containing both the historical 17-month
 and operative 24-month STEM OPT claims and verifies that the selected date
 changes which atomic claim can be retrieved.
+
+## Curating the 24-case evaluation
+
+Build the fixed candidate set and two independent review sheets:
+
+```bash
+python3 -m scripts.build_selected_benchmark \
+  --output-dir data/reports/benchmark
+```
+
+Follow [`evaluation/ANNOTATION_GUIDE.md`](evaluation/ANNOTATION_GUIDE.md). The
+finalizer freezes only cases approved by two different reviewers with matching
+labels and exports disagreements for adjudication. Until that review and the
+planned DSO/legal audit are complete, all generated metrics are diagnostics—not
+final test results.
+
+The development-only diagnostic is run with:
+
+```bash
+python3 -m scripts.run_evaluation \
+  --cases data/reports/benchmark/development-candidates.jsonl \
+  --output data/reports/benchmark/development-diagnostic-report.json
+
+python3 -m scripts.summarize_evaluation \
+  --report data/reports/benchmark/development-diagnostic-report.json \
+  --output data/reports/benchmark/development-diagnostic-summary.md
+```
+
+The current diagnostic deliberately abstains when a passage-level claim lacks
+an independently supported effective interval. This is a measured system
+limitation, not a date filled from hand-written metadata.
+
+After independent review freezes the benchmark, run the held-out test split
+without mixing in development cases:
+
+```bash
+python3 -m scripts.run_evaluation \
+  --cases data/reports/benchmark/frozen-benchmark.jsonl \
+  --split test \
+  --output data/reports/benchmark/final-test-report.json
+
+python3 -m scripts.summarize_evaluation \
+  --report data/reports/benchmark/final-test-report.json \
+  --output data/reports/benchmark/final-test-summary.md
+```

@@ -9,6 +9,7 @@ from retrieval.schema import TemporalVerdict
 
 
 class FactType(str, Enum):
+    PROPOSITION = "proposition"
     QUANTITY = "quantity"
     DATE = "date"
     FORM = "form"
@@ -53,6 +54,7 @@ class FactCheck(BaseModel):
 class MeaningVerificationRequest(BaseModel):
     source_text: str = Field(min_length=1)
     explanation: str = Field(min_length=1)
+    critical_facts: list[str] = Field(default_factory=list)
 
 
 class MeaningVerificationResponse(BaseModel):

@@ -7,6 +7,7 @@ from pathlib import Path
 
 from api import config
 from evaluation.runner import run_file
+from evaluation.schema import BenchmarkSplit
 
 
 def main() -> None:
@@ -17,8 +18,17 @@ def main() -> None:
         type=Path,
         default=config.REPORT_DIR / "evaluation-report.json",
     )
+    parser.add_argument(
+        "--split",
+        choices=[split.value for split in BenchmarkSplit],
+        help="Evaluate only the selected benchmark split.",
+    )
     arguments = parser.parse_args()
-    report = run_file(arguments.cases, arguments.output)
+    report = run_file(
+        arguments.cases,
+        arguments.output,
+        BenchmarkSplit(arguments.split) if arguments.split else None,
+    )
     print(report.model_dump_json(indent=2))
 
 

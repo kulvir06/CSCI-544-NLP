@@ -1,0 +1,462 @@
+{
+  "dataset_status": "reviewed_benchmark",
+  "total_cases": 10,
+  "temporal_verdict_accuracy": 0.9,
+  "mean_critical_fact_preservation": 0.5583,
+  "systems": {
+    "static_baseline": {
+      "total_cases": 10,
+      "unsafe_cases": 7,
+      "safe_cases": 2,
+      "false_safe_count": 7,
+      "unsafe_detected_count": 0,
+      "safe_accepted_count": 2,
+      "abstained_count": 0,
+      "exact_accuracy": 0.2,
+      "false_safe_rate": 1.0,
+      "false_safe_wilson_95": [
+        0.6457,
+        1.0
+      ],
+      "unsafe_detection_rate": 0.0,
+      "safe_acceptance_rate": 1.0,
+      "safe_acceptance_wilson_95": [
+        0.3424,
+        1.0
+      ],
+      "abstention_rate": 0.0,
+      "per_error": {
+        "condition_omitted": {
+          "count": 1,
+          "correct": 0,
+          "unsafe_detected": 0,
+          "false_safe": 1,
+          "abstained": 0
+        },
+        "exception_omitted": {
+          "count": 2,
+          "correct": 0,
+          "unsafe_detected": 0,
+          "false_safe": 2,
+          "abstained": 0
+        },
+        "form_changed": {
+          "count": 1,
+          "correct": 0,
+          "unsafe_detected": 0,
+          "false_safe": 1,
+          "abstained": 0
+        },
+        "negation_reversed": {
+          "count": 1,
+          "correct": 0,
+          "unsafe_detected": 0,
+          "false_safe": 1,
+          "abstained": 0
+        },
+        "safe": {
+          "count": 2,
+          "correct": 2,
+          "unsafe_detected": 0,
+          "false_safe": 0,
+          "abstained": 0
+        },
+        "temporal_uncertainty": {
+          "count": 1,
+          "correct": 0,
+          "unsafe_detected": 0,
+          "false_safe": 0,
+          "abstained": 0
+        },
+        "wrong_version": {
+          "count": 2,
+          "correct": 0,
+          "unsafe_detected": 0,
+          "false_safe": 2,
+          "abstained": 0
+        }
+      }
+    },
+    "temporal_only": {
+      "total_cases": 10,
+      "unsafe_cases": 7,
+      "safe_cases": 2,
+      "false_safe_count": 5,
+      "unsafe_detected_count": 2,
+      "safe_accepted_count": 1,
+      "abstained_count": 2,
+      "exact_accuracy": 0.4,
+      "false_safe_rate": 0.7143,
+      "false_safe_wilson_95": [
+        0.3589,
+        0.9178
+      ],
+      "unsafe_detection_rate": 0.2857,
+      "safe_acceptance_rate": 0.5,
+      "safe_acceptance_wilson_95": [
+        0.0945,
+        0.9055
+      ],
+      "abstention_rate": 0.2,
+      "per_error": {
+        "condition_omitted": {
+          "count": 1,
+          "correct": 0,
+          "unsafe_detected": 0,
+          "false_safe": 1,
+          "abstained": 0
+        },
+        "exception_omitted": {
+          "count": 2,
+          "correct": 0,
+          "unsafe_detected": 0,
+          "false_safe": 2,
+          "abstained": 0
+        },
+        "form_changed": {
+          "count": 1,
+          "correct": 0,
+          "unsafe_detected": 0,
+          "false_safe": 1,
+          "abstained": 0
+        },
+        "negation_reversed": {
+          "count": 1,
+          "correct": 0,
+          "unsafe_detected": 0,
+          "false_safe": 1,
+          "abstained": 0
+        },
+        "safe": {
+          "count": 2,
+          "correct": 1,
+          "unsafe_detected": 0,
+          "false_safe": 0,
+          "abstained": 1
+        },
+        "temporal_uncertainty": {
+          "count": 1,
+          "correct": 1,
+          "unsafe_detected": 0,
+          "false_safe": 0,
+          "abstained": 1
+        },
+        "wrong_version": {
+          "count": 2,
+          "correct": 2,
+          "unsafe_detected": 2,
+          "false_safe": 0,
+          "abstained": 0
+        }
+      }
+    },
+    "meaning_only": {
+      "total_cases": 10,
+      "unsafe_cases": 7,
+      "safe_cases": 2,
+      "false_safe_count": 1,
+      "unsafe_detected_count": 6,
+      "safe_accepted_count": 2,
+      "abstained_count": 0,
+      "exact_accuracy": 0.8,
+      "false_safe_rate": 0.1429,
+      "false_safe_wilson_95": [
+        0.0257,
+        0.5131
+      ],
+      "unsafe_detection_rate": 0.8571,
+      "safe_acceptance_rate": 1.0,
+      "safe_acceptance_wilson_95": [
+        0.3424,
+        1.0
+      ],
+      "abstention_rate": 0.0,
+      "per_error": {
+        "condition_omitted": {
+          "count": 1,
+          "correct": 1,
+          "unsafe_detected": 1,
+          "false_safe": 0,
+          "abstained": 0
+        },
+        "exception_omitted": {
+          "count": 2,
+          "correct": 2,
+          "unsafe_detected": 2,
+          "false_safe": 0,
+          "abstained": 0
+        },
+        "form_changed": {
+          "count": 1,
+          "correct": 1,
+          "unsafe_detected": 1,
+          "false_safe": 0,
+          "abstained": 0
+        },
+        "negation_reversed": {
+          "count": 1,
+          "correct": 1,
+          "unsafe_detected": 1,
+          "false_safe": 0,
+          "abstained": 0
+        },
+        "safe": {
+          "count": 2,
+          "correct": 2,
+          "unsafe_detected": 0,
+          "false_safe": 0,
+          "abstained": 0
+        },
+        "temporal_uncertainty": {
+          "count": 1,
+          "correct": 0,
+          "unsafe_detected": 1,
+          "false_safe": 0,
+          "abstained": 0
+        },
+        "wrong_version": {
+          "count": 2,
+          "correct": 1,
+          "unsafe_detected": 1,
+          "false_safe": 1,
+          "abstained": 0
+        }
+      }
+    },
+    "combined": {
+      "total_cases": 10,
+      "unsafe_cases": 7,
+      "safe_cases": 2,
+      "false_safe_count": 0,
+      "unsafe_detected_count": 7,
+      "safe_accepted_count": 1,
+      "abstained_count": 2,
+      "exact_accuracy": 0.9,
+      "false_safe_rate": 0.0,
+      "false_safe_wilson_95": [
+        0.0,
+        0.3543
+      ],
+      "unsafe_detection_rate": 1.0,
+      "safe_acceptance_rate": 0.5,
+      "safe_acceptance_wilson_95": [
+        0.0945,
+        0.9055
+      ],
+      "abstention_rate": 0.2,
+      "per_error": {
+        "condition_omitted": {
+          "count": 1,
+          "correct": 1,
+          "unsafe_detected": 1,
+          "false_safe": 0,
+          "abstained": 0
+        },
+        "exception_omitted": {
+          "count": 2,
+          "correct": 2,
+          "unsafe_detected": 2,
+          "false_safe": 0,
+          "abstained": 0
+        },
+        "form_changed": {
+          "count": 1,
+          "correct": 1,
+          "unsafe_detected": 1,
+          "false_safe": 0,
+          "abstained": 0
+        },
+        "negation_reversed": {
+          "count": 1,
+          "correct": 1,
+          "unsafe_detected": 1,
+          "false_safe": 0,
+          "abstained": 0
+        },
+        "safe": {
+          "count": 2,
+          "correct": 1,
+          "unsafe_detected": 0,
+          "false_safe": 0,
+          "abstained": 1
+        },
+        "temporal_uncertainty": {
+          "count": 1,
+          "correct": 1,
+          "unsafe_detected": 0,
+          "false_safe": 0,
+          "abstained": 1
+        },
+        "wrong_version": {
+          "count": 2,
+          "correct": 2,
+          "unsafe_detected": 2,
+          "false_safe": 0,
+          "abstained": 0
+        }
+      }
+    }
+  },
+  "cases": [
+    {
+      "case_id": "TEST-03",
+      "error_type": "safe",
+      "gold_label": "safe",
+      "meaning_verdict": "pass",
+      "critical_fact_preservation": 1.0,
+      "observed_temporal_verdict": "insufficient_temporal_evidence",
+      "expected_temporal_verdict": "verified_applicable",
+      "matched_temporal_claim_id": "362fe269cd38f32a-p0100-c00275-d5b8b161c4cb",
+      "predictions": {
+        "static_baseline": "safe",
+        "temporal_only": "abstain",
+        "meaning_only": "safe",
+        "combined": "abstain"
+      }
+    },
+    {
+      "case_id": "TEST-04",
+      "error_type": "safe",
+      "gold_label": "safe",
+      "meaning_verdict": "pass",
+      "critical_fact_preservation": 1.0,
+      "observed_temporal_verdict": "verified_applicable",
+      "expected_temporal_verdict": "verified_applicable",
+      "matched_temporal_claim_id": "1b151d689037a5ec-p0063-c01457-c38fde3434d5",
+      "predictions": {
+        "static_baseline": "safe",
+        "temporal_only": "safe",
+        "meaning_only": "safe",
+        "combined": "safe"
+      }
+    },
+    {
+      "case_id": "TEST-05",
+      "error_type": "wrong_version",
+      "gold_label": "unsafe",
+      "meaning_verdict": "pass",
+      "critical_fact_preservation": 1.0,
+      "observed_temporal_verdict": "verified_not_applicable",
+      "expected_temporal_verdict": "verified_not_applicable",
+      "matched_temporal_claim_id": "78372d30f25a483c-p0026-c00056-5252f9a3ec1a",
+      "predictions": {
+        "static_baseline": "safe",
+        "temporal_only": "unsafe",
+        "meaning_only": "safe",
+        "combined": "unsafe"
+      }
+    },
+    {
+      "case_id": "TEST-07",
+      "error_type": "wrong_version",
+      "gold_label": "unsafe",
+      "meaning_verdict": "fail",
+      "critical_fact_preservation": 0.75,
+      "observed_temporal_verdict": "verified_not_applicable",
+      "expected_temporal_verdict": "verified_not_applicable",
+      "matched_temporal_claim_id": "561ec895a9641414-p0077-c01494-97cccab1c786",
+      "predictions": {
+        "static_baseline": "safe",
+        "temporal_only": "unsafe",
+        "meaning_only": "unsafe",
+        "combined": "unsafe"
+      }
+    },
+    {
+      "case_id": "TEST-10",
+      "error_type": "negation_reversed",
+      "gold_label": "unsafe",
+      "meaning_verdict": "fail",
+      "critical_fact_preservation": 0.0,
+      "observed_temporal_verdict": "verified_applicable",
+      "expected_temporal_verdict": "verified_applicable",
+      "matched_temporal_claim_id": "362fe269cd38f32a-p0090-c00267-83ce9d9819e4",
+      "predictions": {
+        "static_baseline": "safe",
+        "temporal_only": "safe",
+        "meaning_only": "unsafe",
+        "combined": "unsafe"
+      }
+    },
+    {
+      "case_id": "TEST-12",
+      "error_type": "condition_omitted",
+      "gold_label": "unsafe",
+      "meaning_verdict": "fail",
+      "critical_fact_preservation": 0.0,
+      "observed_temporal_verdict": "verified_applicable",
+      "expected_temporal_verdict": "verified_applicable",
+      "matched_temporal_claim_id": "1b151d689037a5ec-p0063-c01457-c38fde3434d5",
+      "predictions": {
+        "static_baseline": "safe",
+        "temporal_only": "safe",
+        "meaning_only": "unsafe",
+        "combined": "unsafe"
+      }
+    },
+    {
+      "case_id": "TEST-13",
+      "error_type": "exception_omitted",
+      "gold_label": "unsafe",
+      "meaning_verdict": "fail",
+      "critical_fact_preservation": 0.3333,
+      "observed_temporal_verdict": "verified_applicable",
+      "expected_temporal_verdict": "verified_applicable",
+      "matched_temporal_claim_id": "362fe269cd38f32a-p0090-c00267-83ce9d9819e4",
+      "predictions": {
+        "static_baseline": "safe",
+        "temporal_only": "safe",
+        "meaning_only": "unsafe",
+        "combined": "unsafe"
+      }
+    },
+    {
+      "case_id": "TEST-14",
+      "error_type": "exception_omitted",
+      "gold_label": "unsafe",
+      "meaning_verdict": "fail",
+      "critical_fact_preservation": 0.6667,
+      "observed_temporal_verdict": "verified_applicable",
+      "expected_temporal_verdict": "verified_applicable",
+      "matched_temporal_claim_id": "aad23adab49f25e7-p0487-c00789-c2f48e41c609",
+      "predictions": {
+        "static_baseline": "safe",
+        "temporal_only": "safe",
+        "meaning_only": "unsafe",
+        "combined": "unsafe"
+      }
+    },
+    {
+      "case_id": "TEST-15",
+      "error_type": "form_changed",
+      "gold_label": "unsafe",
+      "meaning_verdict": "fail",
+      "critical_fact_preservation": 0.3333,
+      "observed_temporal_verdict": "verified_applicable",
+      "expected_temporal_verdict": "verified_applicable",
+      "matched_temporal_claim_id": "362fe269cd38f32a-p0090-c00267-83ce9d9819e4",
+      "predictions": {
+        "static_baseline": "safe",
+        "temporal_only": "safe",
+        "meaning_only": "unsafe",
+        "combined": "unsafe"
+      }
+    },
+    {
+      "case_id": "TEST-16",
+      "error_type": "temporal_uncertainty",
+      "gold_label": "abstain",
+      "meaning_verdict": "fail",
+      "critical_fact_preservation": 0.5,
+      "observed_temporal_verdict": "insufficient_temporal_evidence",
+      "expected_temporal_verdict": "insufficient_temporal_evidence",
+      "matched_temporal_claim_id": "306aba553730c6aa-p0002-c00961-408d7f918523",
+      "predictions": {
+        "static_baseline": "safe",
+        "temporal_only": "abstain",
+        "meaning_only": "unsafe",
+        "combined": "abstain"
+      }
+    }
+  ]
+}

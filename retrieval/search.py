@@ -147,6 +147,52 @@ def _temporal_status(
     return PassageTemporalStatus.APPLICABLE
 
 
+def verify_source_temporality(
+    source_passage_id: str,
+    source_text: str,
+    relevant_date: date,
+) -> tuple[TemporalVerdict, str | None]:
+    """Verify the dated applicability of a supplied evidence excerpt.
+
+    Unlike open retrieval, this checks the passage that actually supports the
+    candidate explanation. That distinction is essential for wrong-version
+    benchmark cases: retrieving a different, currently applicable rule must not
+    make an explanation grounded in an obsolete passage appear safe.
+    """
+    claims = [
+        claim
+        for claim in load_temporal_claims()
+        if claim.source_passage_id == source_passage_id
+    ]
+    if not claims:
+        return TemporalVerdict.INSUFFICIENT_TEMPORAL_EVIDENCE, None
+
+    source_terms = set(_tokens(source_text))
+    scored: list[tuple[float, TemporalClaim]] = []
+    for claim in claims:
+        claim_terms = set(_tokens(f"{claim.text} {claim.evidence_quote}"))
+        overlap = (
+            len(source_terms & claim_terms) / len(source_terms)
+            if source_terms else 0.0
+        )
+        scored.append((overlap, claim))
+    scored.sort(key=lambda item: (-item[0], item[1].claim_id))
+    best_score, best_claim = scored[0]
+    if best_score == 0:
+        return TemporalVerdict.INSUFFICIENT_TEMPORAL_EVIDENCE, None
+
+    status = _temporal_status(best_claim, relevant_date)
+    verdict = {
+        PassageTemporalStatus.APPLICABLE: TemporalVerdict.VERIFIED_APPLICABLE,
+        PassageTemporalStatus.NOT_APPLICABLE: TemporalVerdict.VERIFIED_NOT_APPLICABLE,
+        PassageTemporalStatus.INSUFFICIENT_EVIDENCE: (
+            TemporalVerdict.INSUFFICIENT_TEMPORAL_EVIDENCE
+        ),
+        PassageTemporalStatus.NOT_REQUESTED: TemporalVerdict.NOT_REQUESTED,
+    }[status]
+    return verdict, best_claim.claim_id
+
+
 def _query_embedding(
     query: str, claims: list[RankablePassage]
 ) -> Union[list[float], None]:

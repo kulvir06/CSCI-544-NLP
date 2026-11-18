@@ -35,8 +35,14 @@ class SystemConfiguration(str, Enum):
     COMBINED = "combined"
 
 
+class BenchmarkSplit(str, Enum):
+    DEVELOPMENT = "development"
+    TEST = "test"
+
+
 class EvaluationCase(BaseModel):
     case_id: str
+    question: Optional[str] = None
     source_text: str = Field(min_length=1)
     explanation: str = Field(min_length=1)
     error_type: ErrorType
@@ -45,6 +51,8 @@ class EvaluationCase(BaseModel):
     observed_temporal_verdict: TemporalVerdict = TemporalVerdict.NOT_REQUESTED
     expected_temporal_verdict: TemporalVerdict = TemporalVerdict.NOT_REQUESTED
     relevant_date: Optional[date] = None
+    benchmark_split: Optional[BenchmarkSplit] = None
+    automatic_temporal_verification: bool = False
     document_id: Optional[str] = None
     passage_id: Optional[str] = None
     page_number: Optional[int] = None
@@ -52,10 +60,17 @@ class EvaluationCase(BaseModel):
     reviewer: Optional[str] = None
     mutation_description: Optional[str] = None
     review_notes: Optional[str] = None
+    atomic_fact_checklist: list[str] = Field(default_factory=list)
     development_fixture: bool = True
 
     @model_validator(mode="after")
     def reviewed_cases_require_provenance(self) -> "EvaluationCase":
+        if self.automatic_temporal_verification and (
+            not self.passage_id or not self.relevant_date
+        ):
+            raise ValueError(
+                "Automatic temporal verification requires passage_id and relevant_date"
+            )
         if not self.development_fixture:
             missing = [
                 name
@@ -80,6 +95,9 @@ class CaseEvaluationResult(BaseModel):
     gold_label: GoldLabel
     meaning_verdict: MeaningVerdict
     critical_fact_preservation: float
+    observed_temporal_verdict: TemporalVerdict
+    expected_temporal_verdict: TemporalVerdict
+    matched_temporal_claim_id: Optional[str] = None
     predictions: dict[SystemConfiguration, SafetyVerdict]
 
 
@@ -93,10 +111,18 @@ class ErrorMetrics(BaseModel):
 
 class SystemMetrics(BaseModel):
     total_cases: int
+    unsafe_cases: int
+    safe_cases: int
+    false_safe_count: int
+    unsafe_detected_count: int
+    safe_accepted_count: int
+    abstained_count: int
     exact_accuracy: float
     false_safe_rate: float
+    false_safe_wilson_95: tuple[float, float]
     unsafe_detection_rate: float
     safe_acceptance_rate: float
+    safe_acceptance_wilson_95: tuple[float, float]
     abstention_rate: float
     per_error: dict[ErrorType, ErrorMetrics]
 

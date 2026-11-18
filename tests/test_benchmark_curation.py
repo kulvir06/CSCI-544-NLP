@@ -10,7 +10,11 @@ from pydantic import ValidationError
 
 from api import config
 from benchmark.draft import draft_cases
-from benchmark.review import finalize_reviewed_cases, write_drafts
+from benchmark.review import (
+    finalize_independently_reviewed_cases,
+    finalize_reviewed_cases,
+    write_drafts,
+)
 from corpus.schema import CorpusUse, DocumentStatus, SourceTier
 from evaluation.runner import load_cases
 from evaluation.schema import ErrorType, EvaluationCase, GoldLabel
@@ -116,6 +120,43 @@ class BenchmarkCurationTests(unittest.TestCase):
                 expected_temporal_verdict=TemporalVerdict.NOT_REQUESTED,
                 development_fixture=False,
             )
+
+    def test_two_reviewer_finalization_requires_matching_independent_reviews(self):
+        cases = draft_cases(max_per_error=1, safe_controls=1)[:2]
+        draft_path, review_a = write_drafts(
+            cases, self.base / "draft-two.jsonl", self.base / "review-a.csv"
+        )
+        _, review_b = write_drafts(
+            cases, self.base / "draft-copy.jsonl", self.base / "review-b.csv"
+        )
+
+        for path, reviewer in ((review_a, "Reviewer A"), (review_b, "Reviewer B")):
+            with path.open(encoding="utf-8", newline="") as input_file:
+                reader = csv.DictReader(input_file)
+                fieldnames = reader.fieldnames
+                rows = list(reader)
+            for row in rows:
+                row["approve"] = "yes"
+                row["reviewer"] = reviewer
+            if path == review_b:
+                rows[1]["gold_label"] = "unsafe" if rows[1]["gold_label"] != "unsafe" else "safe"
+            with path.open("w", encoding="utf-8", newline="") as output:
+                writer = csv.DictWriter(output, fieldnames=fieldnames)
+                writer.writeheader()
+                writer.writerows(rows)
+
+        report = finalize_independently_reviewed_cases(
+            draft_path,
+            review_a,
+            review_b,
+            self.base / "frozen.jsonl",
+            self.base / "disagreements.csv",
+        )
+
+        self.assertEqual(report["jointly_reviewed"], 2)
+        self.assertEqual(report["finalized_cases"], 1)
+        self.assertEqual(report["disagreements"], 1)
+        self.assertTrue((self.base / "disagreements.csv").exists())
 
 
 if __name__ == "__main__":

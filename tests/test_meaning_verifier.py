@@ -105,6 +105,55 @@ class MeaningVerifierTests(unittest.TestCase):
 
         self.assertEqual(response.verdict, MeaningVerdict.REVIEW)
 
+    def test_reviewed_checklist_limits_evaluation_to_critical_facts(self):
+        response = verify_meaning(
+            MeaningVerificationRequest(
+                source_text=(
+                    "A background sentence mentions 90 days. The operative limit "
+                    "is no more than 150 aggregate days of unemployment."
+                ),
+                explanation=(
+                    "A student may accrue no more than 150 aggregate days of "
+                    "unemployment."
+                ),
+                critical_facts=["no more than 150 aggregate days of unemployment"],
+            )
+        )
+
+        self.assertEqual(response.verdict, MeaningVerdict.PASS)
+        self.assertEqual(response.extracted_fact_count, 1)
+
+    def test_reviewed_checklist_detects_missing_proposition(self):
+        response = verify_meaning(
+            MeaningVerificationRequest(
+                source_text="The employer must participate in E-Verify.",
+                explanation="The student may receive a STEM OPT extension.",
+                critical_facts=["employer participates in E-Verify"],
+            )
+        )
+
+        self.assertEqual(response.verdict, MeaningVerdict.FAIL)
+
+    def test_reviewed_checklist_detects_quantity_with_modifier(self):
+        response = verify_meaning(
+            MeaningVerificationRequest(
+                source_text="The limit is 150 aggregate days of unemployment.",
+                explanation="The limit is 120 aggregate days of unemployment.",
+                critical_facts=["150 aggregate days of unemployment"],
+            )
+        )
+        self.assertEqual(response.verdict, MeaningVerdict.FAIL)
+
+    def test_reviewed_checklist_detects_recurring_month_day_change(self):
+        response = verify_meaning(
+            MeaningVerificationRequest(
+                source_text="Protection extends until April 1.",
+                explanation="Protection extends until October 1.",
+                critical_facts=["until April 1"],
+            )
+        )
+        self.assertEqual(response.verdict, MeaningVerdict.FAIL)
+
     def test_combined_verifier_passes_only_when_both_stages_pass(self):
         response = verify_safety(
             SafetyVerificationRequest(
